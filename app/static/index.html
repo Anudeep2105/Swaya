@@ -1,0 +1,2531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Swaya</title>
+
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:#f5f7fa;color:#172033}
+button{border:0;border-radius:8px;padding:10px 16px;background:#2563eb;color:white;font-weight:600;cursor:pointer}
+button:hover{opacity:.9}
+button.secondary{background:white;color:#344054;border:1px solid #d0d5dd}
+button.danger{background:#dc2626}
+input,textarea,select{width:100%;padding:10px 12px;border:1px solid #d0d5dd;border-radius:8px;margin:6px 0 14px;font:inherit}
+textarea{resize:vertical}
+label{font-weight:600;display:block;margin-top:8px}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:12px;border-bottom:1px solid #eaecf0;vertical-align:top}
+th{background:#f9fafb}
+.card{background:white;border:1px solid #eaecf0;border-radius:12px;padding:20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(16,24,40,.05)}
+.muted{color:#667085}
+.pill{display:inline-block;padding:4px 9px;border-radius:20px;background:#eef4ff;color:#175cd3;font-size:12px;font-weight:600}
+.success{color:#067647}
+.error{color:#b42318}
+.warning{color:#b54708}
+.hidden{display:none!important}
+.app{display:flex;min-height:100vh}
+.sidebar{width:250px;background:#101828;color:white;padding:20px;position:fixed;left:0;top:0;bottom:0;overflow:auto}
+.sidebar h2{margin-top:0}
+.sidebar button{display:block;width:100%;text-align:left;background:transparent;margin:5px 0}
+.sidebar button:hover{background:#1d2939}
+.main{margin-left:250px;width:calc(100% - 250px)}
+.topbar{background:white;border-bottom:1px solid #eaecf0;padding:15px 24px;display:flex;justify-content:space-between;align-items:center}
+.content{padding:24px;max-width:1400px;margin:auto}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+.stat{font-size:28px;font-weight:700}
+.lesson{cursor:pointer;transition:.15s}
+.lesson:hover{transform:translateY(-2px)}
+.lesson.locked{opacity:.65}
+.lesson.done{border-left:5px solid #12b76a}
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.login-box{width:420px;max-width:100%;background:white;padding:32px;border-radius:16px;border:1px solid #eaecf0}
+.nav-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+pre{background:#101828;color:#f8fafc;padding:15px;border-radius:8px;overflow:auto}
+code{font-family:Consolas,monospace}
+.question{border:1px solid #eaecf0;border-radius:10px;padding:18px;margin-bottom:15px}
+.option{display:block;padding:8px;margin:5px 0}
+@media(max-width:800px){
+ .sidebar{position:static;width:100%;height:auto}
+ .app{display:block}
+ .main{margin-left:0;width:100%}
+}
+</style>
+</head>
+
+<body>
+
+<div id="app"></div>
+
+<script>
+const API='/api';
+let currentUser=null;
+let courseLessons=[];
+let currentLesson=null;
+let currentCourseId=null;
+let quizQuestions=[];
+let historyStack=[];
+let pythonExercises=[];
+let pythonIndex=0;
+
+function $(s){return document.querySelector(s)}
+function esc(v){
+  return String(v??'')
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#039;');
+}
+
+async function api(path,opts={}){
+  const headers=opts.headers||{};
+  if(!(opts.body instanceof FormData)) headers['Content-Type']='application/json';
+
+  const token=localStorage.getItem('token');
+  if(token) headers.Authorization='Bearer '+token;
+
+  const r=await fetch(API+path,{...opts,headers});
+
+  let data=null;
+  try{data=await r.json()}catch{}
+
+  if(!r.ok){
+    throw new Error(data?.detail||data?.message||('Request failed: '+r.status));
+  }
+
+  return data;
+}
+
+function setView(html){$('#view').innerHTML=html}
+function pushPage(fn){
+  if(historyStack[historyStack.length-1]!==fn) historyStack.push(fn);
+}
+function goBack(){
+  if(historyStack.length>1){
+    historyStack.pop();
+    const fn=historyStack[historyStack.length-1];
+    if(typeof fn==='function') fn();
+  }else dashboard();
+}
+
+function backButton(){
+  return '<button class="secondary" onclick="goBack()">&#8592; Back</button>';
+}
+
+function logout(){
+  localStorage.removeItem('token');
+  currentUser=null;
+  historyStack=[];
+  loginPage();
+}
+
+async function start(){
+  const token=localStorage.getItem('token');
+
+  if(!token){
+    loginPage();
+    return;
+  }
+
+  try{
+    currentUser=await api('/me');
+    dashboard();
+  }catch(e){
+    localStorage.removeItem('token');
+    loginPage();
+  }
+}
+
+function loginPage(){
+  $('#app').innerHTML=`
+    <div class="login-wrap">
+      <div class="login-box">
+        <h1>Swaya</h1>
+        <p class="muted">Your self-directed learning platform</p>
+
+        <form onsubmit="login(event)">
+          <label>Email</label>
+          <input id="loginEmail" type="email" value="learner@example.com" required>
+
+          <label>Password</label>
+          <input id="loginPassword" type="password" value="LearnTest@2026" required>
+
+          <button style="width:100%">Login</button>
+        </form>
+
+        <div id="loginMsg" style="margin-top:15px"></div>
+
+        <hr style="margin:25px 0;border:0;border-top:1px solid #eaecf0">
+
+        <button class="secondary" style="width:100%" onclick="registerPage()">
+          Create learner account
+        </button>
+      </div>
+    </div>`;
+}
+
+async function login(e){
+  e.preventDefault();
+
+  $('#loginMsg').textContent='Signing in...';
+
+  try{
+    const body=JSON.stringify({email:document.querySelector("#loginEmail").value,password:document.querySelector("#loginPassword").value});
+
+
+
+    const r=await fetch(API+'/auth/login',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body
+    });
+
+    const data=await r.json();
+
+    if(!r.ok) throw new Error(data.detail||'Login failed');
+
+    localStorage.setItem('token',data.access_token);
+    currentUser=await api('/me');
+    historyStack=[];
+    dashboard();
+  }catch(e){
+    $('#loginMsg').innerHTML='<p class="error">'+esc(e.message)+'</p>';
+  }
+}
+
+function registerPage(){
+  $('#app').innerHTML=`
+    <div class="login-wrap">
+      <div class="login-box">
+        <button class="secondary" onclick="loginPage()">&#8592; Login</button>
+        <h1>Create Account</h1>
+
+        <form onsubmit="register(event)">
+          <label>Email</label>
+          <input id="regEmail" type="email" required>
+
+          <label>Password</label>
+          <input id="regPassword" type="password" required>
+
+          <button style="width:100%">Register</button>
+        </form>
+
+        <div id="regMsg"></div>
+      </div>
+    </div>`;
+}
+
+async function register(e){
+  e.preventDefault();
+
+  try{
+    await api('/auth/register',{
+      method:'POST',
+      body:JSON.stringify({
+        email:$('#regEmail').value,
+        password:$('#regPassword').value
+      })
+    });
+
+    $('#regMsg').innerHTML='<p class="success">Account created. Please login.</p>';
+  }catch(e){
+    $('#regMsg').innerHTML='<p class="error">'+esc(e.message)+'</p>';
+  }
+}
+
+function shell(content){
+  (window.mediaObjectUrls||[]).forEach(url=>URL.revokeObjectURL(url));
+  window.mediaObjectUrls=[];
+  const role=currentUser?.role||'learner';
+
+  $('#app').innerHTML=`
+    <div class="app">
+
+      <aside class="sidebar">
+        <h2 style="font-size:18px;line-height:1.2">Learning Pathway<br>to become what you want to be</h2>
+        <p style="color:#98a2b3">${esc(currentUser?.email||'')}</p>
+
+        <button onclick="dashboard()">&#127968; Dashboard</button>
+        <button onclick="course()">&#128218; Course</button>
+        <button onclick="gamification()">&#128202; Progress</button>
+        <button onclick="leaderboard()">&#127942; Leaderboard</button>
+        <button onclick="certificate()">&#127941; Certificate</button>
+
+        ${['instructor','admin','assessor'].includes(role)
+          ? `<hr>
+             <button onclick="instructor()">&#128188; Instructor</button>
+             <button onclick="submissions()">&#128221; Submissions</button>`
+          : ''}
+
+        ${role==='admin'||role==='content_moderator'||role==='instructor'
+          ? `<hr><button onclick="content()">&#128218; Course Management</button>`
+          : ''}
+
+        ${role==='admin'||role==='content_moderator'||role==='instructor'
+          ? `<button onclick="questions()">&#128203; Question Bank</button>`
+          : ''}
+
+        ${role==='admin'
+          ? `<hr>
+             <button onclick="adminUsers()">&#128100; Users</button>
+             <button onclick="auditLogs()">&#128196; Audit Logs</button>`
+          : ''}
+
+        <hr>
+        <button onclick="logout()">&#128274; Logout</button>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <strong>Swaya</strong>
+          <span class="pill">${esc(roleLabel(role))}</span>
+        </header>
+
+        <section class="content">
+          ${content}
+        </section>
+      </main>
+
+    </div>`;
+}
+
+async function dashboard(){
+pushPage(dashboard);
+
+try{
+const courses=await api('/courses');
+const selectedId=currentCourseId || courses?.[0]?.id;
+const c=courses?.find(x=>Number(x.id)===Number(selectedId)) || courses?.[0];
+currentCourseId=c?.id || null;
+
+let lessons=[];
+if(c) lessons=await api('/courses/'+c.id+'/lessons');
+
+courseLessons=lessons||[];
+
+let completed=courseLessons.filter(x=>x.completed).length;
+
+shell(`
+  <h1>Welcome back</h1>
+
+  <div class="card">
+    <h2>Your Courses</h2>
+
+    ${courses && courses.length
+      ? `<div class="grid">
+          ${courses.map(courseItem=>`
+            <div class="card">
+              <div class="muted">${esc(courseItem.course_code||'')}</div>
+              <h3>${esc(courseItem.title)}</h3>
+              <p>${esc(courseItem.description||'')}</p>
+              <button onclick="openSelectedCourse(${courseItem.id})">
+                Open Course &#8594;
+              </button>
+            </div>
+          `).join('')}
+        </div>`
+      : '<p>No courses have been assigned to you yet.</p>'
+    }
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="muted">Current Course</div>
+      <div class="stat">${esc(c?.title||'No course')}</div>
+    </div>
+
+    <div class="card">
+      <div class="muted">Lessons Completed</div>
+      <div class="stat">${completed}/${courseLessons.length}</div>
+    </div>
+
+    <div class="card">
+      <div class="muted">Role</div>
+      <div class="stat" style="font-size:22px">${esc(currentUser?.role)}</div>
+    </div>
+  </div>
+
+  ${c ? `
+  <div class="card">
+    <h2>Continue Learning</h2>
+    <p class="muted">
+      Continue learning ${esc(c.title)}.
+    </p>
+    <button onclick="openSelectedCourse(${c.id})">
+      Open Course &#8594;
+    </button>
+  </div>
+
+  <div class="card">
+    <h2>Course Roadmap</h2>
+    <div class="grid">
+      ${courseLessons.slice(0,6).map(l=>`
+        <div class="card lesson ${l.completed?'done':''}" onclick="lesson(${l.id})">
+          <strong>Day ${l.day_number}</strong>
+          <h3>${esc(l.title)}</h3>
+          <p class="muted">${esc(l.goal||'')}</p>
+        </div>`).join('')}
+    </div>
+  </div>
+  ` : ''}
+`);
+}catch(e){
+shell(`<h1>Dashboard</h1><div class="card"><p class="error">${esc(e.message)}</p></div>`);
+}
+}
+
+function roleLabel(role){
+  return ({
+    learner:'Learner',
+    admin:'Admin',
+    content_moderator:'Content Moderator',
+    assessor:'Assessor',
+    instructor:'Course Instructor'
+  })[role]||role;
+}
+
+function mediaMarkup(items){
+  if(!items||!items.length) return '<p>No media uploaded yet.</p>';
+  return items.map(m=>`
+    <div class="card" style="margin:10px 0">
+      <strong>${esc(m.title)}</strong>
+      <div class="muted">${esc(m.filename)} · ${(Number(m.size_bytes||0)/1048576).toFixed(1)} MB</div>
+      <div id="mediaPreview_${m.id}">Loading preview…</div>
+    </div>
+  `).join('');
+}
+
+async function loadMediaPreviews(items){
+  const token=localStorage.getItem('token');
+  for(const media of (items||[])){
+    const target=document.getElementById('mediaPreview_'+media.id);
+    if(!target) continue;
+    try{
+      const response=await fetch(API+'/media/'+media.id,{headers:{Authorization:'Bearer '+token}});
+      if(!response.ok) throw new Error('Preview unavailable');
+      const url=URL.createObjectURL(await response.blob());
+      window.mediaObjectUrls.push(url);
+      let preview='';
+      if(media.media_kind==='video') preview=`<video controls preload="metadata" style="max-width:100%;max-height:480px" src="${url}"></video>`;
+      else if(media.media_kind==='audio') preview=`<audio controls preload="metadata" style="width:100%" src="${url}"></audio>`;
+      else if(media.media_kind==='image') preview=`<img alt="${esc(media.title)}" style="max-width:100%;max-height:480px" src="${url}">`;
+      else if(media.media_kind==='pdf') preview=`<iframe title="${esc(media.title)}" style="width:100%;height:600px;border:0" src="${url}"></iframe>`;
+      target.innerHTML=preview+`<p><a href="${url}" download="${esc(media.filename)}">Open or download ${esc(media.filename)}</a></p>`;
+    }catch(e){
+      target.textContent='Preview could not be loaded.';
+    }
+  }
+}
+
+function selectedMediaFile(inputId){
+  const input=document.getElementById(inputId);
+  const file=input?.files?.[0];
+  if(!file){alert('Choose a file first.');return null;}
+  if(file.size>100*1024*1024){alert('Media files must be 100 MB or smaller.');return null;}
+  return file;
+}
+
+async function uploadCourseMedia(courseId){
+  const file=selectedMediaFile('courseMediaFile');
+  if(!file) return;
+  const form=new FormData();
+  form.append('file',file);
+  form.append('title',$('#courseMediaTitle').value.trim());
+  try{
+    await api('/admin/courses/'+courseId+'/media',{method:'POST',body:form});
+    await viewCourseContent(courseId);
+  }catch(e){alert(e.message);}
+}
+
+async function uploadLessonMedia(courseId,lessonId){
+  const file=selectedMediaFile('lessonMediaFile_'+lessonId);
+  if(!file) return;
+  const form=new FormData();
+  form.append('file',file);
+  form.append('title',document.getElementById('lessonMediaTitle_'+lessonId).value.trim());
+  try{
+    await api('/admin/lessons/'+lessonId+'/media',{method:'POST',body:form});
+    await viewCourseContent(courseId);
+  }catch(e){alert(e.message);}
+}
+
+async function openSelectedCourse(courseId){
+try{
+const lessons=await api('/courses/'+courseId+'/lessons');
+courseLessons=lessons||[];
+currentCourseId=courseId;
+course();
+}catch(e){
+alert(e.message);
+}
+}
+async function course(){
+  pushPage(course);
+
+  try{
+    const courses=await api('/courses');
+    const selectedId=currentCourseId || courses?.[0]?.id;
+const c=courses?.find(x=>Number(x.id)===Number(selectedId)) || courses?.[0];
+currentCourseId=c?.id || null;
+
+    courseLessons=c?await api('/courses/'+c.id+'/lessons'):[];
+    const courseMedia=c?await api('/courses/'+c.id+'/media'):[];
+
+    shell(`
+      <h1>30-Day Data Engineering Course</h1>
+
+      <div class="card">
+        <h2>${esc(c?.title||'Data Engineering')}</h2>
+        <p>${esc(c?.description||'')}</p>
+      </div>
+
+      ${(courseMedia||[]).length ? `<div class="card"><h2>Course Videos and Media</h2>${mediaMarkup(courseMedia)}</div>` : ''}
+
+      <div class="grid">
+        ${courseLessons.map(l=>`
+          <div class="card lesson ${l.completed?'done':''} ${l.locked?'locked':''}"
+               onclick="lesson(${l.id})">
+
+            <span class="pill">Day ${esc(l.day_number)}</span>
+
+            <h3>${esc(l.title)}</h3>
+
+            <p class="muted">${esc(l.goal||'')}</p>
+
+            <p>
+              ${l.completed
+                ? '<span class="success">? Completed</span>'
+                : l.locked
+                  ? '<span class="warning">&#128274; Locked</span>'
+                  : '<span>&#9654; Start Lesson</span>'}
+            </p>
+
+          </div>`).join('')}
+      </div>
+    `);
+  }catch(e){
+    shell(`<h1>Course</h1><div class="card"><p class="error">${esc(e.message)}</p></div>`);
+  }
+}
+
+async function lesson(id){
+  pushPage(()=>lesson(id));
+
+  try{
+    currentLesson=await api('/lessons/'+id);
+
+    shell(`
+      <div class="nav-row">${backButton()}</div>
+
+      <div class="card">
+        <span class="pill">Day ${esc(currentLesson.day_number)}</span>
+        <h1>${esc(currentLesson.title)}</h1>
+        <p class="muted">${esc(currentLesson.goal||'')}</p>
+        <p>? ${esc(currentLesson.estimated_minutes||60)} minutes</p>
+      </div>
+
+      <div class="card">
+        ${currentLesson.content_html
+          ? '<style>'+(currentLesson.content_css||'')+'</style>'+currentLesson.content_html
+          : markdownToHtml(currentLesson.content_md||'')}
+      </div>
+
+      ${(currentLesson.media||[]).length ? `<div class="card"><h2>Lesson Media</h2>${mediaMarkup(currentLesson.media)}</div>` : ''}
+
+      <div class="card">
+        <h2>Learning Objectives</h2>
+        <ul>
+          ${parseJSON(currentLesson.objectives_json||currentLesson.objectives||'[]')
+            .map(x=>'<li>'+esc(x)+'</li>').join('')}
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2>Resources</h2>
+        ${resourcesHtml(currentLesson.resources_json||currentLesson.resources)}
+      </div>
+
+            <div class="card">
+        <h2>Assignment</h2>
+        ${currentLesson.assignments&&currentLesson.assignments.length
+          ? currentLesson.assignments.map(a=>`
+            <div class="card" style="margin-top:12px">
+              <h3>${esc(a.title)}</h3>
+              <p>${esc(a.description||'Complete the practical assignment.')}</p>
+              <p class="muted">Maximum score: ${esc(a.max_score||100)}</p>
+              <label>Upload your assignment</label>
+              <input type="file" id="assignmentFile_${a.id}" accept=".py,.sql,.zip,.txt,.md,.csv,.json">
+              <label>GitHub URL (optional)</label>
+              <input type="url" id="assignmentGithub_${a.id}" placeholder="https://github.com/yourname/project">
+              <label>Comments (optional)</label>
+              <textarea id="assignmentComments_${a.id}" rows="4" placeholder="Add any notes for your instructor"></textarea>
+              <button onclick="submitAssignment(${a.id})">&#128190; Submit Assignment</button>
+              <div id="assignmentResult_${a.id}"></div>
+            </div>
+          `).join('')
+          : '<p>No assignment is available for this lesson.</p>'}
+      </div>
+
+      <div class="card">
+        <h2>Practice</h2>
+        <div class="nav-row">
+          <button onclick="pythonLab(${id})">&#128187; Python Practice Lab</button>
+          <button onclick="takeQuiz(${id})">&#128202; Take Assessment</button>
+        </div>
+
+        <button class="secondary" onclick="completeLesson(${id})">
+          &#9989; Mark Learning Complete
+        </button>
+      </div>
+    `);
+    await loadMediaPreviews(currentLesson.media||[]);
+  }catch(e){
+    shell(`
+      <div class="nav-row">${backButton()}</div>
+      <div class="card">
+        <h2>Unable to open lesson</h2>
+        <p class="error">${esc(e.message)}</p>
+      </div>`);
+  }
+}
+
+function parseJSON(v){
+  if(Array.isArray(v)) return v;
+  try{return JSON.parse(v||'[]')}catch{return []}
+}
+
+function resourcesHtml(v){
+  const r=parseJSON(v);
+
+  if(!r.length) return '<p class="muted">No resources added.</p>';
+
+  return '<ul>'+r.map(x=>{
+    if(typeof x==='string') return '<li>'+esc(x)+'</li>';
+    return '<li><a href="'+esc(x.url||x.href||'#')+'" target="_blank">'+
+           esc(x.title||x.name||x.url||'Resource')+'</a></li>';
+  }).join('')+'</ul>';
+}
+
+function markdownToHtml(md){
+  let s=esc(md);
+
+  s=s.replace(/```([\\s\\S]*?)```/g,'<pre>$1</pre>');
+  s=s.replace(/^### (.*)$/gm,'<h3>$1</h3>');
+  s=s.replace(/^## (.*)$/gm,'<h2>$1</h2>');
+  s=s.replace(/^# (.*)$/gm,'<h1>$1</h1>');
+  s=s.replace(/\\*\\*(.*?)\\*\\*/g,'<strong>$1</strong>');
+  s=s.replace(/`([^`]+)`/g,'<code>$1</code>');
+  s=s.replace(/\n\n/g,'</p><p>');
+  s=s.replace(/\n/g,'<br>');
+
+  return '<p>'+s+'</p>';
+}
+
+async function completeLesson(id){
+  try{
+    await api('/lessons/'+id+'/learning-complete',{method:'POST'});
+    alert('Learning marked complete.');
+    lesson(id);
+  }catch(e){
+    alert(e.message);
+  }
+}
+
+async function submitAssignment(assignmentId){
+  const fileInput=document.querySelector('#assignmentFile_'+assignmentId);
+  const githubInput=document.querySelector('#assignmentGithub_'+assignmentId);
+  const commentsInput=document.querySelector('#assignmentComments_'+assignmentId);
+  const result=document.querySelector('#assignmentResult_'+assignmentId);
+
+  const file=fileInput?.files?.[0]||null;
+  const github_url=(githubInput?.value||'').trim();
+  const comments=(commentsInput?.value||'').trim();
+
+  if(!file && !github_url){
+    result.innerHTML='<p class="error">Please upload a file or provide a GitHub URL.</p>';
+    return;
+  }
+
+  const form=new FormData();
+
+  if(file) form.append('file',file);
+  if(github_url) form.append('github_url',github_url);
+  form.append('comments',comments);
+
+  result.innerHTML='<p class="muted">Submitting...</p>';
+
+  try{
+    const r=await fetch(API+'/assignments/'+assignmentId+'/submit',{
+      method:'POST',
+      headers:{'Authorization':'Bearer '+localStorage.getItem('token')},
+      body:form
+    });
+
+    const data=await r.json();
+
+    if(!r.ok){
+      throw new Error(data.detail||'Assignment submission failed.');
+    }
+
+    result.innerHTML=
+      '<p class="success">Assignment submitted successfully.</p>'+
+      '<p class="muted">Submission ID: '+esc(data.id)+'</p>';
+
+  }catch(e){
+    result.innerHTML='<p class="error">'+esc(e.message)+'</p>';
+  }
+}
+async function takeQuiz(id){
+  pushPage(()=>takeQuiz(id));
+
+  try{
+    quizQuestions=(await api('/lessons/'+id+'/quiz')).questions||[];
+
+    if(!Array.isArray(quizQuestions)||quizQuestions.length===0){
+      throw new Error('No questions available.');
+    }
+
+    shell(`
+      <div class="nav-row">${backButton()}</div>
+
+      <h1>Assessment</h1>
+
+      <div class="card">
+        <p>You must answer all questions.</p>
+        <p><strong>Mastery requirement: 5/5</strong></p>
+      </div>
+
+      <form onsubmit="submitQuiz(event,${id})">
+
+        ${quizQuestions.map((q,i)=>`
+          <div class="question">
+            <h3>${i+1}. ${esc(q.question)}</h3>
+
+            ${(q.options||[]).map((o,j)=>`
+              <label class="option">
+                <input type="radio"
+                       name="q_${q.id}"
+                       value="${j}"
+                       required>
+                ${esc(o)}
+              </label>`).join('')}
+          </div>
+        `).join('')}
+
+        <button>Submit Assessment</button>
+
+      </form>
+
+      <div id="quizResult"></div>
+    `);
+  }catch(e){
+    shell(`<div class="nav-row">${backButton()}</div>
+      <div class="card"><p class="error">${esc(e.message)}</p></div>`);
+  }
+}
+
+async function submitQuiz(e,id){
+  e.preventDefault();
+
+  const answers={};
+
+  quizQuestions.forEach(q=>{
+    const el=document.querySelector('input[name="q_'+q.id+'"]:checked');
+    if(el) answers[q.id]=Number(el.value);
+  });
+
+  try{
+    const r=await api('/lessons/'+id+'/quiz',{
+      method:'POST',
+      body:JSON.stringify({answers})
+    });
+
+    $('#quizResult').innerHTML=`
+      <div class="card">
+        <h2>${r.passed?'&#9989; Passed':'&#10060; Not Passed'}</h2>
+        <p>Score: <strong>${esc(r.score)}</strong></p>
+        ${r.passed
+          ? '<p class="success">Lesson mastery achieved.</p>'
+          : '<p class="warning">You need 5/5 to pass. Review the lesson and try again.</p>'}
+      </div>`;
+  }catch(e){
+    $('#quizResult').innerHTML=
+      '<div class="card"><p class="error">'+esc(e.message)+'</p></div>';
+  }
+}
+
+async function pythonLab(lessonId){
+  pushPage(()=>pythonLab(lessonId));
+
+  try{
+    pythonExercises=await api('/lessons/'+lessonId+'/python-exercises');
+    pythonIndex=0;
+    renderPythonLab(lessonId);
+  }catch(e){
+    shell(`
+      <div class="nav-row">${backButton()}</div>
+      <div class="card">
+        <h2>Python Practice Lab</h2>
+        <p class="error">${esc(e.message)}</p>
+      </div>`);
+  }
+}
+
+function renderPythonLab(lessonId){
+  const x=pythonExercises[pythonIndex];
+
+  if(!x){
+    shell(`
+      <div class="nav-row">${backButton()}</div>
+      <div class="card">
+        <h2>Python Practice Lab</h2>
+        <p>No Python exercises are available for this lesson.</p>
+      </div>`);
+    return;
+  }
+
+  shell(`
+    <div class="nav-row">${backButton()}</div>
+
+    <h1>&#128187; Python Practice Lab</h1>
+
+    <div class="card">
+      <span class="pill">${esc(x.difficulty||'beginner')}</span>
+      <h2>${esc(x.title)}</h2>
+      <p>${esc(x.instructions||'')}</p>
+
+      <label>Your Code</label>
+      <textarea id="pythonCode"
+        spellcheck="false"
+        style="min-height:300px;font-family:Consolas,monospace">${esc(x.starter_code||'')}</textarea>
+
+      <div class="nav-row">
+        <button onclick="runPythonCode()">&#9654; Run</button>
+        <button onclick="submitPythonCode()">&#128190; Submit</button>
+        <button class="secondary" onclick="resetPythonCode()">Reset</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Output</h3>
+      <pre id="pythonOutput">Ready.</pre>
+    </div>
+
+    <div class="card">
+      <h3>Exercises</h3>
+      ${pythonExercises.map((e,i)=>`
+        <button class="${i===pythonIndex?'':'secondary'}"
+                onclick="selectPythonExercise(${i},${lessonId})">
+          ${i+1}. ${esc(e.title)}
+        </button>
+      `).join('')}
+    </div>
+  `);
+}
+
+function selectPythonExercise(i,lessonId){
+  pythonIndex=i;
+  renderPythonLab(lessonId);
+}
+
+function resetPythonCode(){
+  const x=pythonExercises[pythonIndex];
+  if($('#pythonCode')) $('#pythonCode').value=x?.starter_code||'';
+  if($('#pythonOutput')) $('#pythonOutput').textContent='Ready.';
+}
+
+function pythonPayload(){
+  return {
+    code:$('#pythonCode').value,
+    stdin:''
+  };
+}
+
+async function runPythonCode(){
+  try{
+    $('#pythonOutput').textContent='Running...';
+
+    const r=await api('/python/run',{
+      method:'POST',
+      body:JSON.stringify(pythonPayload())
+    });
+
+    $('#pythonOutput').textContent=
+      (r.output||'')+
+      (r.error?'\n'+r.error:'');
+  }catch(e){
+    $('#pythonOutput').textContent='Error: '+e.message;
+  }
+}
+
+async function submitPythonCode(){
+  const x=pythonExercises[pythonIndex];
+
+  try{
+    $('#pythonOutput').textContent='Submitting...';
+
+    const r=await api('/python/exercises/'+x.id+'/submit',{
+      method:'POST',
+      body:JSON.stringify(pythonPayload())
+    });
+
+    $('#pythonOutput').textContent=
+      (r.passed?'&#9989; PASSED':'&#10060; NOT PASSED')+
+      '\\nScore: '+(r.score??0)+
+      (r.output?'\\n\\nOutput:\\n'+r.output:'')+
+      (r.error?'\\n\\nError:\\n'+r.error:'');
+  }catch(e){
+    $('#pythonOutput').textContent='Error: '+e.message;
+  }
+}
+
+async function gamification(){
+  pushPage(gamification);
+
+  try{
+    const r=await api('/gamification');
+
+    shell(`
+      <h1>&#128202; Progress & Gamification</h1>
+
+      <div class="grid">
+        <div class="card">
+          <div class="muted">XP</div>
+          <div class="stat">${esc(r.xp??r.total_xp??0)}</div>
+        </div>
+
+        <div class="card">
+          <div class="muted">Level</div>
+          <div class="stat">${esc(r.level??1)}</div>
+        </div>
+
+        <div class="card">
+          <div class="muted">Streak</div>
+          <div class="stat">${esc(r.streak??r.current_streak??0)}</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Badges</h2>
+        <pre>${esc(JSON.stringify(r.badges||[],null,2))}</pre>
+      </div>
+    `);
+  }catch(e){
+    shell(`<h1>Progress</h1><div class="card"><p class="error">${esc(e.message)}</p></div>`);
+  }
+}
+
+async function leaderboard(){
+  pushPage(leaderboard);
+
+  try{
+    const r=await api('/leaderboard');
+
+    shell(`
+      <h1>&#127942; Leaderboard</h1>
+
+      <div class="card" style="overflow:auto">
+        <table>
+          <tr>
+            <th>Rank</th>
+            <th>Learner</th>
+            <th>XP</th>
+            <th>Level</th>
+          </tr>
+
+          ${(r||[]).map((x,i)=>`
+            <tr>
+              <td>${i+1}</td>
+              <td>${esc(x.email||x.name||x.user_id||'-')}</td>
+              <td>${esc(x.xp??x.total_xp??0)}</td>
+              <td>${esc(x.level??'-')}</td>
+            </tr>`).join('')}
+        </table>
+      </div>
+    `);
+  }catch(e){
+    shell(`<h1>Leaderboard</h1><div class="card"><p class="error">${esc(e.message)}</p></div>`);
+  }
+}
+
+async function certificate(){
+  pushPage(certificate);
+
+  try{
+    const r=await api('/certificates/me');
+
+    const list=Array.isArray(r)?r:(r?[r]:[]);
+
+    shell(`
+      <h1>&#127941; Certificates</h1>
+
+      ${list.length
+        ? list.map(c=>`
+          <div class="card">
+            <h2>${esc(c.course_title||c.title||'Data Engineering Certificate')}</h2>
+            <p>Certificate ID: ${esc(c.id||c.certificate_id)}</p>
+            <button onclick="window.open('${API}/certificates/${esc(c.id||c.certificate_id)}/pdf','_blank')">
+              Open PDF
+            </button>
+          </div>`).join('')
+        : `<div class="card">
+             <p>No certificate generated yet.</p>
+             <button onclick="generateCertificate()">Generate Certificate</button>
+           </div>`}
+    `);
+  }catch(e){
+    shell(`<h1>Certificates</h1><div class="card"><p class="error">${esc(e.message)}</p></div>`);
+  }
+}
+
+async function generateCertificate(){
+  try{
+    const courses=await api('/courses');
+    const selectedId=currentCourseId || courses?.[0]?.id;
+const c=courses?.find(x=>Number(x.id)===Number(selectedId)) || courses?.[0];
+currentCourseId=c?.id || null;
+
+    if(!c) throw new Error('Course not found');
+
+    await api('/certificates/generate/'+c.id,{method:'POST'});
+    alert('Certificate generated.');
+    certificate();
+  }catch(e){
+    alert(e.message);
+  }
+}
+
+async function instructor(){
+  pushPage(instructor);
+
+  try{
+    const r=await api('/instructor/dashboard');
+
+    const dayData=Array.isArray(r.day_completion)?r.day_completion:[];
+    const atRisk=Array.isArray(r.at_risk)?r.at_risk:[];
+
+    shell(`
+      <div class="nav-row">
+        ${backButton()}
+      </div>
+
+      <h1>&#128188; Instructor Dashboard</h1>
+
+      <div class="grid">
+        <div class="card">
+          <div class="muted">Total Learners</div>
+          <div class="stat">${esc(r.learners??0)}</div>
+        </div>
+
+        <div class="card">
+          <div class="muted">Average Assessment Score</div>
+          <div class="stat">${esc(r.average_assessment_score??0)}%</div>
+        </div>
+
+        <div class="card">
+          <div class="muted">At-Risk Learners</div>
+          <div class="stat">${esc(atRisk.length)}</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Day Completion</h2>
+
+        <div style="overflow:auto">
+          <table>
+            <tr>
+              <th>Day</th>
+              <th>Completed</th>
+              <th>Total Learners</th>
+              <th>Completion %</th>
+            </tr>
+
+            ${dayData.map(d=>{
+              const completed=d.completed??d.count??0;
+              const total=d.total??r.learners??0;
+              const percent=total ? Math.round((completed/total)*100) : 0;
+
+              return `
+                <tr>
+                  <td>${esc(d.day_number??d.day??'-')}</td>
+                  <td>${esc(completed)}</td>
+                  <td>${esc(total)}</td>
+                  <td>${esc(percent)}%</td>
+                </tr>`;
+            }).join('')}
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>At-Risk Learners</h2>
+
+        ${atRisk.length
+          ? `<table>
+              <tr>
+                <th>Learner</th>
+                <th>Details</th>
+              </tr>
+              ${atRisk.map(x=>`
+                <tr>
+                  <td>${esc(x.email||x.user_email||x.name||x.user_id||'-')}</td>
+                  <td>${esc(
+                    typeof x==='object'
+                      ? Object.entries(x)
+                          .filter(([k])=>!['email','user_email','name','user_id'].includes(k))
+                          .map(([k,v])=>k.replaceAll('_',' ')+': '+v)
+                          .join(' | ')
+                      : x
+                  )}</td>
+                </tr>
+              `).join('')}
+            </table>`
+          : '<p class="success">No learners are currently at risk.</p>'}
+      </div>
+
+      <div class="card">
+        <h2>Instructor Actions</h2>
+        <div class="nav-row">
+          <button onclick="submissions()">&#128221; Assignment Submissions</button>
+        </div>
+      </div>
+    `);
+
+  }catch(e){
+    shell(`
+      <div class="nav-row">${backButton()}</div>
+      <div class="card">
+        <h2>Instructor Dashboard</h2>
+        <p class="error">${esc(e.message)}</p>
+      </div>`);
+  }
+}
+async function submissions(){
+  pushPage(submissions);
+
+  try{
+    const r=await api('/instructor/submissions');
+
+    shell(`
+      <div class="nav-row">
+        ${backButton()}
+      </div>
+
+      <h1>&#128221; Assignment Submissions</h1>
+
+      <div class="card" style="overflow:auto">
+        ${r&&r.length
+          ? `<table>
+              <tr>
+                <th>ID</th>
+                <th>Learner</th>
+                <th>Assignment</th>
+                <th>File</th>
+                <th>GitHub</th>
+                <th>Comments</th>
+                <th>Status</th>
+                <th>Score</th>
+                <th>Action</th>
+              </tr>
+
+              ${r.map(x=>`
+                <tr>
+                  <td>${esc(x.id)}</td>
+
+                  <td>
+                    <strong>${esc(x.user_name||'-')}</strong><br>
+                    <span class="muted">${esc(x.user_email||'-')}</span>
+                  </td>
+
+                  <td>
+                    ${esc(x.assignment_title||'-')}<br>
+                    <span class="muted">Lesson ${esc(x.lesson_id||'-')}</span>
+                  </td>
+
+                  <td>
+                    ${x.filename
+                      ? `<span>${esc(x.filename)}</span>`
+                      : '<span class="muted">No file</span>'}
+                  </td>
+
+                  <td>
+                    ${x.github_url
+                      ? `<a href="${esc(x.github_url)}" target="_blank" rel="noopener">Open GitHub</a>`
+                      : '<span class="muted">None</span>'}
+                  </td>
+
+                  <td>${esc(x.comments||'-')}</td>
+
+                  <td>${esc(x.status||'-')}</td>
+
+                  <td>
+                    ${x.score===null||x.score===undefined
+                      ? '<span class="muted">Not graded</span>'
+                      : esc(x.score)}
+                  </td>
+
+                  <td>
+                    <button onclick="reviewSubmission(${x.id})">
+                      &#128269; Review
+                    </button>
+                  </td>
+                </tr>
+              `).join('')}
+            </table>`
+          : '<p class="muted">No assignment submissions found.</p>'}
+      </div>
+    `);
+
+  }catch(e){
+    shell(`
+      <div class="nav-row">${backButton()}</div>
+      <h1>Assignment Submissions</h1>
+      <div class="card">
+        <p class="error">${esc(e.message)}</p>
+      </div>`);
+  }
+}
+async function openSubmissionFile(id){
+  try{
+    const token=localStorage.getItem('token');
+    const response=await fetch('/api/instructor/submissions/'+id+'/file',{
+      headers:{'Authorization':'Bearer '+token}
+    });
+
+    if(!response.ok){
+      const msg=await response.text();
+      throw new Error(msg||'Unable to open uploaded file');
+    }
+
+    const blob=await response.blob();
+    const url=URL.createObjectURL(blob);
+    window.open(url,'_blank');
+
+    setTimeout(()=>URL.revokeObjectURL(url),60000);
+  }catch(e){
+    alert('Unable to open uploaded file: '+e.message);
+  }
+}
+async function reviewSubmission(id){
+  try{
+    const submissions=await api('/instructor/submissions');
+    const s=(submissions||[]).find(x=>Number(x.id)===Number(id));
+
+    if(!s){
+      throw new Error('Submission not found.');
+    }
+
+    shell(`
+      <div class="nav-row">
+        ${backButton()}
+      </div>
+
+      <h1>&#128221; Assignment Evaluation</h1>
+
+      <div class="card">
+        <h2>Submission Details</h2>
+
+        <p><strong>Submission ID:</strong> ${esc(s.id)}</p>
+        <p><strong>Learner ID:</strong> ${esc(s.user_id||'-')}</p>
+        <p><strong>Assignment ID:</strong> ${esc(s.assignment_id||'-')}</p>
+        <p><strong>File:</strong> ${esc(s.filename||'No file uploaded')} ${s.filename ? `<button class="secondary" onclick="openSubmissionFile(${s.id})" style="margin-left:10px">&#128194; Open File</button>` : ''}</p>
+        <p><strong>Status:</strong> ${esc(s.status||'-')}</p>
+        <p><strong>Submitted:</strong> ${esc(s.submitted_at||'-')}</p>
+
+        ${s.github_url
+          ? `<p><strong>GitHub:</strong>
+               <a href="${esc(s.github_url)}" target="_blank" rel="noopener">
+                 ${esc(s.github_url)}
+               </a>
+             </p>`
+          : '<p><strong>GitHub:</strong> Not provided</p>'}
+
+        <div class="card" style="margin-top:16px">
+          <h3>Learner Comments</h3>
+          <p>${esc(s.comments||'No comments provided.')}</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Evaluation</h2>
+
+        <label><strong>Score (0-100)</strong></label>
+        <input
+          type="number"
+          id="evaluationScore"
+          min="0"
+          max="100"
+          value="${s.score??''}"
+          placeholder="Enter score"
+          style="display:block;width:200px;padding:10px;margin:8px 0 18px;font-size:18px;border:2px solid #888;border-radius:6px;background:#fff;color:#000;">
+
+        <label>Instructor Feedback</label>
+        <textarea
+          id="evaluationFeedback"
+          rows="6"
+          placeholder="Provide feedback to the learner">${esc(s.feedback||'')}</textarea>
+
+        <div class="nav-row">
+          <button onclick="saveEvaluation(${s.id})">
+            &#9989; Submit Evaluation
+          </button>
+
+          <button class="secondary" onclick="submissions()">
+            Back to Submissions
+          </button>
+        </div>
+
+        <div id="evaluationResult"></div>
+      </div>
+    `);
+
+  }catch(e){
+    shell(`
+      <div class="nav-row">${backButton()}</div>
+      <div class="card">
+        <h2>Unable to open submission</h2>
+        <p class="error">${esc(e.message)}</p>
+      </div>`);
+  }
+}
+
+async function saveEvaluation(id){
+  const scoreInput=document.querySelector('#evaluationScore');
+  const feedbackInput=document.querySelector('#evaluationFeedback');
+  const result=document.querySelector('#evaluationResult');
+
+  const score=Number(scoreInput?.value);
+  const feedback=(feedbackInput?.value||'').trim();
+
+  if(!Number.isFinite(score) || score<0 || score>100){
+    result.innerHTML='<p class="error">Please enter a score between 0 and 100.</p>';
+    return;
+  }
+
+  result.innerHTML='<p class="muted">Saving evaluation...</p>';
+
+  try{
+    await api('/instructor/submissions/'+id,{
+      method:'PATCH',
+      body:JSON.stringify({
+        score:score,
+        feedback:feedback
+      })
+    });
+
+    result.innerHTML='<p class="success">Evaluation submitted successfully.</p>';
+
+  }catch(e){
+    result.innerHTML='<p class="error">'+esc(e.message)+'</p>';
+  }
+}
+async function gradeSubmission(id){
+  const score=prompt('Score (0-100):');
+  if(score===null) return;
+
+  const feedback=prompt('Feedback:')||'';
+
+  try{
+    await api('/instructor/submissions/'+id,{
+      method:'PATCH',
+      body:JSON.stringify({
+        score:Number(score),
+        feedback
+      })
+    });
+
+    alert('Submission graded.');
+    submissions();
+  }catch(e){
+    alert(e.message);
+  }
+}
+
+async function content(){
+  pushPage(content);
+
+  shell(`
+    <h1>&#128218; Course Management</h1>
+
+    <div class="card">
+      <h2>Courses</h2>
+      <p>Manage course information and lessons.</p>
+      <button onclick="manageCourses()">Open Course Manager</button>
+    </div>
+
+    <div class="card">
+      <h2>Lessons</h2>
+      <button onclick="manageLessons()">Open Lesson Manager</button>
+    </div>
+  `);
+}
+
+async function manageCourses(){
+  try{
+	const courses=await api('/admin/courses');
+    shell(`
+      <div class="nav-row">${backButton()}</div>
+      <h1>Course Manager</h1>${currentUser?.role==='admin'?'<button onclick="showCreateCourse()">+ Create New Course</button>':''}
+
+      <div class="card" style="overflow:auto">
+        <table>
+      <tr><th>ID</th><th>Code</th><th>Title</th><th>Slug</th><th>Status</th><th>Action</th></tr>
+
+          ${(courses||[]).map(c=>`
+            <tr>
+              <td>${esc(c.id)}</td>
+          <td><strong>${esc(c.course_code||"")}</strong></td>
+              <td>${esc(c.title)}</td>
+              <td>${esc(c.slug)}</td>
+              <td>${esc(c.status)}</td>
+              <td>
+                <button onclick="viewCourseContent(${c.id})">View Content</button>
+                <button class="secondary" onclick="viewCourseContent(${c.id})">Manage Media</button>
+                ${['admin','content_moderator'].includes(currentUser?.role)?`<button onclick="editCourse(${c.id})">Edit</button>`:''}
+              </td>
+            </tr>`).join('')}
+        </table>
+      </div>
+    `);
+  }catch(e){
+    shell(`<div class="card"><p class="error">${esc(e.message)}</p></div>`);
+  }
+}
+
+function showCreateCourse(){
+  shell(`
+    <div class="nav-row">${backButton()}</div>
+
+    <h1>Create New Course</h1>
+
+    <div class="card">
+      <label>Course Title</label>
+      <input id="newCourseTitle" placeholder="e.g. Business Analysis">
+
+      <label>Course Slug</label>
+      <input id="newCourseSlug" placeholder="e.g. business-analysis">
+
+      <label>Description</label>
+      <textarea id="newCourseDescription" rows="5"
+        placeholder="Describe the course"></textarea>
+
+      <label>Status</label>
+      <select id="newCourseStatus">
+        <option value="draft">Draft</option>
+        <option value="published">Published</option>
+      </select>
+
+      <div style="margin-top:16px;display:flex;gap:10px">
+        <button onclick="createCourse()">Create Course</button>
+        <button onclick="manageCourses()">Cancel</button>
+      </div>
+    </div>
+  `);
+}
+
+async function createCourse(){
+  const title=$('#newCourseTitle').value.trim();
+  const slug=$('#newCourseSlug').value.trim();
+  const description=$('#newCourseDescription').value.trim();
+  const status=$('#newCourseStatus').value;
+
+  if(!title){
+    alert('Course title is required.');
+    return;
+  }
+
+  if(!slug){
+    alert('Course slug is required.');
+    return;
+  }
+
+  try{
+    await api('/admin/courses',{
+      method:'POST',
+      body:JSON.stringify({
+        title,
+        slug,
+        description,
+        status
+      })
+    });
+
+    alert('Course created successfully.');
+    manageCourses();
+  }catch(e){
+    alert(e.message);
+  }
+}
+async function editCourse(id){
+  const title=prompt('Course title:');
+  if(title===null) return;
+
+  const description=prompt('Description:')||'';
+  const slug=prompt('Slug:')||'data-engineering-30-day';
+  const status=prompt('Status:','published')||'published';
+
+  try{
+    await api('/admin/courses/'+id,{
+      method:'PUT',
+      body:JSON.stringify({title,description,slug,status})
+    });
+
+    alert('Course updated.');
+    manageCourses();
+  }catch(e){
+    alert(e.message);
+  }
+}
+
+async function viewCourseContent(courseId){
+  try{
+    const courses=await api('/admin/courses');
+    const course=(courses||[]).find(c=>Number(c.id)===Number(courseId));
+    if(!course) throw new Error('Course not found.');
+    const lessons=await api('/courses/'+courseId+'/lessons');
+    const lessonContent=await Promise.all((lessons||[]).map(l=>api('/lessons/'+l.id)));
+    const courseMedia=await api('/courses/'+courseId+'/media');
+
+    shell(`
+      <div class="nav-row">${backButton()}</div>
+      <h1>${esc(course.title)} — Course Content</h1>
+      <div class="card">
+        <p><strong>Course code:</strong> ${esc(course.course_code||'')}</p>
+        <p><strong>Status:</strong> ${esc(course.status||'')}</p>
+        <p>${esc(course.description||'No course description.')}</p>
+      </div>
+      <div class="card">
+        <h2>Course Videos and Media</h2>
+        <p>Upload a video or other course-level media. Maximum file size: 100 MB.</p>
+        <input id="courseMediaFile" type="file" accept=".mp4,.m4v,.mov,.webm,.avi,.mp3,.wav,.ogg,.m4a,.png,.jpg,.jpeg,.gif,.webp,.pdf">
+        <label>Display title (optional)</label>
+        <input id="courseMediaTitle" maxlength="255" placeholder="Title shown to learners">
+        <button onclick="uploadCourseMedia(${courseId})">Upload Course Media</button>
+        ${mediaMarkup(courseMedia)}
+      </div>
+      ${(lessonContent||[]).length ? lessonContent.map(l=>`
+        <details class="card" style="margin-bottom:12px">
+          <summary><strong>Day ${esc(l.day_number)}: ${esc(l.title)}</strong></summary>
+          <p><strong>Goal:</strong> ${esc(l.goal||'')}</p>
+          <p><strong>Status:</strong> ${esc(l.status||'')}</p>
+          <h3>Lesson content</h3>
+          <pre style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(l.content_md||'No Markdown content.')}</pre>
+          ${l.content_html ? `<h3>HTML content</h3><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(l.content_html)}</pre>` : ''}
+          ${l.content_css ? `<h3>CSS</h3><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(l.content_css)}</pre>` : ''}
+          ${(l.assignments||[]).length ? `<h3>Assignments</h3>${l.assignments.map(a=>`<p><strong>${esc(a.title)}</strong><br>${esc(a.description||'')}</p>`).join('')}` : ''}
+          <h3>Lesson Media</h3>
+          ${mediaMarkup(l.media||[])}
+          <label>Upload image, audio, video, or PDF (maximum 100 MB)</label>
+          <input id="lessonMediaFile_${l.id}" type="file" accept=".mp4,.m4v,.mov,.webm,.avi,.mp3,.wav,.ogg,.m4a,.png,.jpg,.jpeg,.gif,.webp,.pdf">
+          <label>Display title (optional)</label>
+          <input id="lessonMediaTitle_${l.id}" maxlength="255" placeholder="Title shown to learners">
+          <button onclick="uploadLessonMedia(${courseId},${l.id})">Upload Lesson Media</button>
+        </details>
+      `).join('') : `
+        <div class="card">
+          <p>No lessons or lesson content have been added to this course yet.</p>
+          <button onclick="manageLessons(${courseId})">Add or manage lessons</button>
+        </div>
+      `}
+    `);
+    await loadMediaPreviews([...(courseMedia||[]),...(lessonContent||[]).flatMap(l=>l.media||[])]);
+  }catch(e){
+    shell(`<div class="card"><p class="error">${esc(e.message)}</p></div>`);
+  }
+}
+
+async function manageLessons(selectedCourseId=null){
+  try{
+    const courses=await api('/admin/courses');
+
+    shell(`
+      <div class="nav-row">${backButton()}</div>
+      <h1>Lesson Manager</h1>
+
+      <div class="card">
+        <label>Select Course</label>
+
+        <select id="lessonCourseSelect" onchange="loadCourseLessons()">
+          <option value="">-- Select a Course --</option>
+
+          ${(courses||[]).map(c=>`
+            <option value="${c.id}">
+              ${esc(c.title)} (${esc(c.status)})
+            </option>
+          `).join('')}
+        </select>
+      </div>
+
+      <div id="courseLessonsArea">
+        <div class="card">
+          <p>Select a course to manage its lessons.</p>
+        </div>
+      </div>
+    `);
+    if(selectedCourseId){
+      $('#lessonCourseSelect').value=String(selectedCourseId);
+      await loadCourseLessons();
+    }
+  }catch(e){
+    shell(`<div class="card"><p class="error">${esc(e.message)}</p></div>`);
+  }
+}
+
+async function loadCourseLessons(){
+  const courseId=$('#lessonCourseSelect').value;
+
+  if(!courseId){
+    $('#courseLessonsArea').innerHTML=`
+      <div class="card">
+        <p>Select a course to manage its lessons.</p>
+      </div>
+    `;
+    return;
+  }
+
+  try{
+    const lessons=await api('/courses/'+courseId+'/lessons');
+
+    $('#courseLessonsArea').innerHTML=`
+      <div class="card">
+        <button onclick="newLesson(${courseId})">+ Add Lesson</button>
+      </div>
+
+      <div class="card" style="overflow:auto">
+        <table>
+          <tr>
+           <th>Code</th>
+            <th>Day</th>
+            <th>Title</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+
+          ${(lessons||[]).map(l=>`
+            <tr>
+             <td><strong>${esc(l.lesson_code||'')}</strong></td>
+              <td>${esc(l.day_number)}</td>
+              <td>${esc(l.title)}</td>
+              <td>${esc(l.status)}</td>
+              <td>
+                <button onclick="editLesson(${l.id})">Edit</button>
+              </td>
+            </tr>
+          `).join('')}
+        </table>
+      </div>
+    `;
+  }catch(e){
+    $('#courseLessonsArea').innerHTML=`
+      <div class="card">
+        <p class="error">${esc(e.message)}</p>
+      </div>
+    `;
+  }
+}
+
+function newLesson(courseId){
+  shell(`
+    <div class="nav-row">${backButton()}</div>
+    <h1>Create New Lesson</h1>
+
+    <div class="card">
+      <label>Day Number</label>
+      <input id="newLessonDay" type="number" min="1" max="365" placeholder="1">
+
+      <label>Lesson Title</label>
+      <input id="newLessonTitle" placeholder="Lesson title">
+
+      <label>Goal</label>
+      <textarea id="newLessonGoal" rows="3" placeholder="What will the learner achieve?"></textarea>
+
+      <label>Lesson Content</label>
+      <textarea id="newLessonContent" rows="12" placeholder="Enter lesson content in Markdown"></textarea>
+
+      <label>Estimated Minutes</label>
+      <input id="newLessonMinutes" type="number" min="1" value="60">
+
+      <div style="margin-top:16px">
+        <button onclick="saveNewLesson(${courseId})">Create Lesson</button>
+        <button onclick="manageLessons()">Cancel</button>
+      </div>
+    </div>
+  `);
+}
+
+async function saveNewLesson(courseId){
+  const day=Number($('#newLessonDay').value);
+  const title=$('#newLessonTitle').value.trim();
+  const goal=$('#newLessonGoal').value.trim();
+  const content_md=$('#newLessonContent').value;
+  const estimated_minutes=Number($('#newLessonMinutes').value)||60;
+
+  if(!day){
+    alert('Please enter the day number.');
+    return;
+  }
+
+  if(!title){
+    alert('Please enter the lesson title.');
+    return;
+  }
+
+  try{
+    const result=await api(
+      '/admin/lessons?course_id='+encodeURIComponent(courseId),
+      {
+        method:'POST',
+        body:JSON.stringify({
+          day_number:day,
+          title:title,
+          goal:goal,
+          content_md:content_md,
+          content_html:'',
+          content_css:'',
+          objectives:[],
+          resources:[],
+          status:'published',
+          estimated_minutes:estimated_minutes
+        })
+      }
+    );
+
+    alert('Lesson created successfully. Lesson Code: '+(result.lesson_code||result.id));
+    manageLessons();
+  }catch(e){
+    alert(e.message);
+  }
+}
+async function editLesson(id){
+  pushPage(()=>editLesson(id));
+  try{
+    const l=await api('/lessons/'+id);
+
+    window.currentLessonObjectives=l.objectives||[];
+    window.currentLessonResources=l.resources||[];
+
+    shell(`
+      <div class="nav-row">${backButton()}</div>
+
+      <h1>Edit Lesson - Day ${esc(l.day_number)}</h1>
+
+      <div class="card">
+        <h2>Basic Information</h2>
+
+        <label>Lesson Title</label>
+        <input id="el_title" value="${esc(l.title)}">
+
+        <label>Goal</label>
+        <textarea id="el_goal" rows="3">${esc(l.goal||'')}</textarea>
+
+        <label>Status</label>
+        <select id="el_status">
+          <option ${l.status==='draft'?'selected':''}>draft</option>
+          <option ${l.status==='published'?'selected':''}>published</option>
+        </select>
+
+        <label>Estimated Minutes</label>
+        <input id="el_minutes" type="number" min="1" value="${esc(l.estimated_minutes||60)}">
+      </div>
+
+      <div class="card">
+        <h2>Lesson Content</h2>
+
+        <label>Markdown Content</label>
+        <textarea id="el_content" style="min-height:250px">${esc(l.content_md||'')}</textarea>
+
+        <label>HTML + CSS Editor</label>
+
+        <textarea
+          id="el_html_css"
+          style="min-height:550px;width:100%;font-family:Consolas,monospace;font-size:14px;line-height:1.5"
+          oninput="previewLessonHtml()"
+          placeholder="Write HTML here and place CSS inside a <style>...</style> block..."
+        >${esc((l.content_html||'') + ((l.content_css||'').trim() ? "\n\n<style>\n" + (l.content_css||'') + "\n</style>" : ''))}</textarea>
+
+        <div style="margin-top:10px;padding:12px;background:#f5f7fa;border-radius:8px;font-size:13px">
+          <strong>Tip:</strong>
+          Write HTML normally and place CSS inside
+          <code>&lt;style&gt;...&lt;/style&gt;</code>.
+          The system will automatically separate HTML and CSS when saving.
+        </div>
+        <h3>HTML + CSS Preview</h3>
+
+        <div
+          id="lessonHtmlPreview"
+          style="border:1px solid #ccc;border-radius:8px;padding:20px;background:#fff;min-height:100px"
+        ></div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <h2>Learning Objectives</h2>
+          <button class="secondary" onclick="addLessonObjective()">+ Add Objective</button>
+        </div>
+
+        <div id="lessonObjectives"></div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <h2>Learning Resources</h2>
+          <button class="secondary" onclick="addLearningResource()">+ Add Resource</button>
+        </div>
+
+        <p style="color:#666">
+          Add documentation, videos, articles, tutorials, datasets or other useful learning material.
+        </p>
+
+        <div id="lessonResources"></div>
+      </div>
+
+      <div class="card">
+        <button onclick="saveLesson(${id})">Save Lesson</button>
+        <button class="secondary" onclick="manageLessons()">Cancel</button>
+      </div>
+    `);
+
+    renderLessonObjectives();
+    renderLearningResources();
+    previewLessonHtml();
+
+  }catch(e){
+    shell(`<div class="card"><p class="error">${esc(e.message)}</p></div>`);
+  }
+}
+
+function previewLessonHtml(){
+  const preview=$('#lessonHtmlPreview');
+  const editor=$('#el_html_css');
+
+  if(!preview || !editor)return;
+
+  const source=editor.value||'';
+
+  preview.innerHTML=source;
+}
+
+function renderLessonObjectives(){
+  const box=$('#lessonObjectives');
+  if(!box)return;
+
+  const items=window.currentLessonObjectives||[];
+
+  box.innerHTML=items.map((x,i)=>`
+    <div style="display:flex;gap:8px;margin:8px 0">
+      <input
+        id="objective_${i}"
+        value="${esc(x||'')}"
+        placeholder="Learning objective"
+        style="flex:1"
+      >
+      <button class="secondary" onclick="removeLessonObjective(${i})">Remove</button>
+    </div>
+  `).join('');
+
+  if(!items.length){
+    box.innerHTML='<p style="color:#777">No objectives added yet.</p>';
+  }
+}
+
+function addLessonObjective(){
+  if(!window.currentLessonObjectives)window.currentLessonObjectives=[];
+  window.currentLessonObjectives.push('');
+  renderLessonObjectives();
+}
+
+function removeLessonObjective(i){
+  window.currentLessonObjectives.splice(i,1);
+  renderLessonObjectives();
+}
+
+function collectLessonObjectives(){
+  return (window.currentLessonObjectives||[])
+    .map((_,i)=>$('#objective_'+i)?.value.trim()||'')
+    .filter(Boolean);
+}
+
+function renderLearningResources(){
+  const box=$('#lessonResources');
+  if(!box)return;
+
+  const items=window.currentLessonResources||[];
+
+  box.innerHTML=items.map((r,i)=>`
+    <div class="card" style="margin:10px 0;background:#f8f9fa">
+
+      <div style="display:flex;justify-content:space-between">
+        <strong>Resource ${i+1}</strong>
+        <button class="secondary" onclick="removeLearningResource(${i})">Remove</button>
+      </div>
+
+      <label>Title</label>
+      <input
+        id="resource_title_${i}"
+        value="${esc(r.title||'')}"
+        placeholder="Resource title"
+      >
+
+      <label>Type</label>
+      <select id="resource_type_${i}">
+        <option ${r.type==='documentation'?'selected':''}>documentation</option>
+        <option ${r.type==='video'?'selected':''}>video</option>
+        <option ${r.type==='article'?'selected':''}>article</option>
+        <option ${r.type==='tutorial'?'selected':''}>tutorial</option>
+        <option ${r.type==='dataset'?'selected':''}>dataset</option>
+        <option ${r.type==='github'?'selected':''}>github</option>
+        <option ${r.type==='other'?'selected':''}>other</option>
+      </select>
+
+      <label>URL</label>
+      <input
+        id="resource_url_${i}"
+        value="${esc(r.url||'')}"
+        placeholder="https://..."
+      >
+
+      <label>Description</label>
+      <textarea
+        id="resource_description_${i}"
+        rows="2"
+      >${esc(r.description||'')}</textarea>
+
+    </div>
+  `).join('');
+
+  if(!items.length){
+    box.innerHTML='<p style="color:#777">No learning resources added yet.</p>';
+  }
+}
+
+function addLearningResource(){
+  if(!window.currentLessonResources)window.currentLessonResources=[];
+
+  window.currentLessonResources.push({
+    title:'',
+    type:'documentation',
+    url:'',
+    description:''
+  });
+
+  renderLearningResources();
+}
+
+function removeLearningResource(i){
+  window.currentLessonResources.splice(i,1);
+  renderLearningResources();
+}
+
+function collectLearningResources(){
+  return (window.currentLessonResources||[])
+    .map((r,i)=>({
+      title:$('#resource_title_'+i)?.value.trim()||'',
+      type:$('#resource_type_'+i)?.value||'other',
+      url:$('#resource_url_'+i)?.value.trim()||'',
+      description:$('#resource_description_'+i)?.value.trim()||''
+    }))
+    .filter(r=>r.title||r.url||r.description);
+}
+
+async function saveLesson(id){
+  try{
+    const existing=await api('/lessons/'+id);
+
+    await api(
+      '/admin/lessons/'+id+
+      '?course_id='+encodeURIComponent(window.currentCourseId||1),
+      {
+        method:'PUT',
+        body:JSON.stringify({
+          day_number:existing.day_number,
+          title:$('#el_title').value,
+          goal:$('#el_goal').value,
+          content_md:$('#el_content').value,          content_html:(function(){
+            const source=$('#el_html_css').value||'';
+            return source.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi,'').trim();
+          })(),
+          content_css:(function(){
+            const source=$('#el_html_css').value||'';
+            const matches=[...source.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)];
+            return matches.map(m=>m[1].trim()).filter(Boolean).join("\n\n");
+          })(),
+          objectives:collectLessonObjectives(),
+          resources:collectLearningResources(),
+          status:$('#el_status').value,
+          estimated_minutes:Number($('#el_minutes').value||60)
+        })
+      }
+    );
+
+    alert('Lesson updated successfully.');
+    manageLessons();
+
+  }catch(e){
+    alert(e.message);
+  }
+}
+
+async function questions(){
+  pushPage(questions);
+
+  try{
+    const qs=await api('/admin/questions');
+
+    shell(`
+      <div class="nav-row">${backButton()}</div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:15px;flex-wrap:wrap">
+        <h1>&#128203; Question Bank</h1>
+        <button onclick="showQuestionForm()">+ Add Question</button>
+      </div>
+
+      <div class="card">
+        <input id="questionSearch"
+               placeholder="&#128269; Search questions, topics or lessons..."
+               oninput="filterQuestions()">
+      </div>
+
+      <div class="card" style="overflow:auto">
+        <table id="questionTable">
+          <tr>
+            <th>Lesson</th>
+            <th>Question</th>
+            <th>Difficulty</th>
+            <th>Topic</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+
+          ${(qs||[]).map(q=>`
+            <tr data-search="${esc((q.question+' '+q.topic+' '+q.lesson_id).toLowerCase())}">
+              <td>Day ${esc(q.lesson_id)}</td>
+              <td>${esc(q.question)}</td>
+              <td>${esc(q.difficulty||'-')}</td>
+              <td>${esc(q.topic||'-')}</td>
+              <td>${q.active?'<span class="pill">Active</span>':'Inactive'}</td>
+              <td>
+                <button onclick="editQuestion(${q.id})">Edit</button>
+              </td>
+            </tr>`).join('')}
+        </table>
+      </div>
+    `);
+  }catch(e){
+    shell(`<h1>Question Bank</h1><div class="card"><p class="error">${esc(e.message)}</p></div>`);
+  }
+}
+
+function filterQuestions(){
+  const s=($('#questionSearch')?.value||'').toLowerCase();
+
+  document.querySelectorAll('#questionTable tr[data-search]').forEach(row=>{
+    row.style.display=row.dataset.search.includes(s)?'':'none';
+  });
+}
+
+async function showQuestionForm(id=null){
+  let q=null;
+
+  if(id){
+    const all=await api('/admin/questions');
+    q=all.find(x=>Number(x.id)===Number(id));
+  }
+
+  const opts=q?.options||[];
+
+  shell(`
+    <div class="nav-row">${backButton()}</div>
+
+    <h1>${id?'&#9999; Edit Question':'&#43; Add Question'}</h1>
+
+    <div class="card">
+
+      <label>Lesson / Day ID</label>
+      <input id="q_lesson_id" type="number" min="1" max="30"
+             value="${esc(q?.lesson_id||1)}">
+
+      <label>Question</label>
+      <textarea id="q_question" rows="4">${esc(q?.question||'')}</textarea>
+
+      <h2>Answer Options</h2>
+
+      ${[0,1,2,3].map(i=>`
+        <label>Option ${String.fromCharCode(65+i)}</label>
+        <input id="q_opt${i}" value="${esc(opts[i]||'')}">
+      `).join('')}
+
+      <label>Correct Answer</label>
+      <select id="q_correct">
+        ${[0,1,2,3].map(i=>`
+          <option value="${i}" ${Number(q?.correct_index)===i?'selected':''}>
+            Option ${String.fromCharCode(65+i)}
+          </option>`).join('')}
+      </select>
+
+      <label>Explanation</label>
+      <textarea id="q_explanation">${esc(q?.explanation||'')}</textarea>
+
+      <label>Learning Resource URL</label>
+      <input id="q_resource" value="${esc(q?.resource_url||'')}">
+
+      <label>Difficulty</label>
+      <select id="q_difficulty">
+        ${['beginner','easy','medium','hard','advanced'].map(x=>
+          '<option '+(q?.difficulty===x?'selected':'')+'>'+x+'</option>'
+        ).join('')}
+      </select>
+
+      <label>Topic</label>
+      <input id="q_topic" value="${esc(q?.topic||'')}">
+
+      <label>Tags</label>
+      <input id="q_tags" value="${esc((q?.tags||[]).join(', '))}">
+
+      <label>
+        <input id="q_active" type="checkbox"
+               style="width:auto"
+               ${q?.active!==false?'checked':''}>
+        Active
+      </label>
+
+      <div class="nav-row">
+        <button onclick="saveQuestion(${id||'null'})">
+          ${id?'Save Changes':'Create Question'}
+        </button>
+
+        <button class="secondary" onclick="questions()">Cancel</button>
+      </div>
+
+      <div id="questionSaveMsg"></div>
+    </div>
+  `);
+}
+
+function editQuestion(id){
+  showQuestionForm(id);
+}
+
+async function saveQuestion(id){
+  const payload={
+    lesson_id:Number($('#q_lesson_id').value),
+    question:$('#q_question').value.trim(),
+    options:[
+      $('#q_opt0').value,
+      $('#q_opt1').value,
+      $('#q_opt2').value,
+      $('#q_opt3').value
+    ],
+    correct_index:Number($('#q_correct').value),
+    explanation:$('#q_explanation').value,
+    resource_url:$('#q_resource').value,
+    difficulty:$('#q_difficulty').value,
+    topic:$('#q_topic').value,
+    tags:$('#q_tags').value.split(',').map(x=>x.trim()).filter(Boolean),
+    active:$('#q_active').checked
+  };
+
+  if(!payload.question||payload.options.some(x=>!x)){
+    $('#questionSaveMsg').innerHTML=
+      '<p class="error">Question and all four options are required.</p>';
+    return;
+  }
+
+  try{
+    if(id){
+      await api('/admin/questions/'+id,{
+        method:'PUT',
+        body:JSON.stringify(payload)
+      });
+    }else{
+      await api('/admin/questions',{
+        method:'POST',
+        body:JSON.stringify(payload)
+      });
+    }
+
+    alert(id?'Question updated.':'Question created.');
+    questions();
+  }catch(e){
+    $('#questionSaveMsg').innerHTML=
+      '<p class="error">'+esc(e.message)+'</p>';
+  }
+}
+
+async function adminUsers(){
+pushPage(adminUsers);
+
+try{
+const users=await api('/admin/users');
+
+shell(`
+  <div class="nav-row">${backButton()}</div>
+  <h1>&#128100; Users</h1>
+  <button onclick="newAdminUser()">+ Create User</button>
+
+  <div class="card" style="overflow:auto">
+    <table>
+      <tr>
+        <th>ID</th>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Role</th>
+        <th>Status</th>
+        <th>Action</th>
+      </tr>
+
+      ${(users||[]).map(u=>`
+        <tr>
+          <td>${esc(u.id)}</td>
+          <td>${esc(u.name)}</td>
+          <td>${esc(u.email)}</td>
+          <td>${esc(roleLabel(u.role))}</td>
+          <td>${u.active ? 'Active' : 'Inactive'}</td>
+          <td>
+            <button class="secondary" onclick="editAdminUser(${u.id})">Edit User</button>
+
+            ${u.role==='learner'
+              ? `<button class="secondary"
+                         onclick="manageUserCourses(${u.id},'${esc(u.email)}')">
+                   Manage Courses
+                 </button>`
+              : ''}
+          </td>
+        </tr>`).join('')}
+    </table>
+  </div>
+`);
+
+}catch(e){
+shell(`<h1>Users</h1><div class="card"><p class="error">${esc(e.message)}</p></div>`);
+}
+}
+
+function newAdminUser(){
+  shell(`
+    <div class="nav-row">${backButton()}</div>
+    <h1>Create User</h1>
+    <div class="card">
+      <label>Name</label>
+      <input id="newUserName" maxlength="120" autocomplete="name">
+      <label>Email</label>
+      <input id="newUserEmail" type="email" autocomplete="email">
+      <label>Initial password (at least 10 characters)</label>
+      <input id="newUserPassword" type="password" minlength="10" autocomplete="new-password">
+      <label>Role</label>
+      <select id="newUserRole">
+        <option value="learner">Learner</option>
+        <option value="instructor">Course Instructor</option>
+        <option value="content_moderator">Content Moderator</option>
+        <option value="assessor">Assessor</option>
+        <option value="admin">Admin</option>
+      </select>
+      <div style="margin-top:16px;display:flex;gap:10px">
+        <button onclick="createAdminUser()">Create User</button>
+        <button class="secondary" onclick="adminUsers()">Cancel</button>
+      </div>
+    </div>
+  `);
+}
+
+async function createAdminUser(){
+  const name=$('#newUserName').value.trim();
+  const email=$('#newUserEmail').value.trim();
+  const password=$('#newUserPassword').value;
+  const role=$('#newUserRole').value;
+  if(!name||!email||password.length<10){
+    alert('Enter a name, valid email, and a password with at least 10 characters.');
+    return;
+  }
+  try{
+    await api('/admin/users',{
+      method:'POST',
+      body:JSON.stringify({name,email,password,role})
+    });
+    alert('User created. Share the initial password securely.');
+    adminUsers();
+  }catch(e){
+    alert(e.message);
+  }
+}
+
+async function manageUserCourses(userId,userEmail){
+pushPage(manageUserCourses);
+
+try{
+const courses=await api('/admin/courses');
+const assigned=await api('/admin/users/'+userId+'/courses');
+
+const activeAssignments=(assigned||[]).filter(x=>x.status==='active');
+const assignedIds=activeAssignments.map(x=>Number(x.course_id));
+
+shell(`
+  <div class="nav-row">${backButton()}</div>
+
+  <h1>&#127891; Course Assignment</h1>
+
+  <div class="card">
+    <h2>${esc(userEmail)}</h2>
+    <p>Select courses to assign to this learner.</p>
+
+    <label>Course</label>
+
+    <select id="assign_course_id">
+      <option value="">-- Select Course --</option>
+
+      ${(courses||[]).map(c=>`
+        <option value="${esc(c.id)}"
+          ${assignedIds.includes(Number(c.id)) ? 'disabled' : ''}>
+          ${esc(c.course_code||'')} - ${esc(c.title)}
+          ${assignedIds.includes(Number(c.id)) ? ' (Already Assigned)' : ''}
+        </option>
+      `).join('')}
+    </select>
+
+    <button onclick="assignUserCourse(${userId})">
+      &#10133; Assign Course
+    </button>
+  </div>
+
+  <div class="card" style="overflow:auto">
+    <h2>Assigned Courses</h2>
+
+    ${activeAssignments.length
+      ? `<table>
+          <tr>
+            <th>Code</th>
+            <th>Course</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+
+          ${activeAssignments.map(c=>`
+            <tr>
+              <td><strong>${esc(c.course_code||'')}</strong></td>
+              <td>${esc(c.course_title||'')}</td>
+              <td>${esc(c.status||'')}</td>
+              <td>
+                <button class="secondary"
+                        onclick="unassignUserCourse(${userId},${c.course_id})">
+                  Unassign
+                </button>
+              </td>
+            </tr>
+          `).join('')}
+        </table>`
+      : '<p>No courses assigned.</p>'
+    }
+  </div>
+`);
+
+}catch(e){
+shell(`<h1>Course Assignment</h1><div class="card"><p class="error">${esc(e.message)}</p></div>`);
+}
+}
+async function assignUserCourse(userId){
+const select=document.getElementById('assign_course_id');
+const courseId=select ? select.value : '';
+
+if(!courseId){
+  alert('Please select a course.');
+  return;
+}
+
+try{
+await api('/admin/users/'+userId+'/courses/'+courseId,{
+  method:'POST'
+});
+
+alert('Course assigned successfully.');
+adminUsers();
+
+}catch(e){
+alert(e.message);
+}
+}
+
+async function unassignUserCourse(userId,courseId){
+if(!confirm('Unassign this course from the learner?')) return;
+
+try{
+await api('/admin/users/'+userId+'/courses/'+courseId,{
+  method:'DELETE'
+});
+
+alert('Course unassigned successfully.');
+adminUsers();
+
+}catch(e){
+alert(e.message);
+}
+}
+async function editAdminUser(id){
+  try{
+    const [users,courses,assigned]=await Promise.all([
+      api('/admin/users'),
+      api('/admin/courses'),
+      api('/admin/users/'+id+'/courses')
+    ]);
+    const user=(users||[]).find(u=>Number(u.id)===Number(id));
+    if(!user) throw new Error('User not found.');
+    window.editUserActiveCourseIds=(assigned||[]).filter(x=>x.status==='active').map(x=>Number(x.course_id));
+    shell(`
+      <div class="nav-row">${backButton()}</div>
+      <h1>Edit User</h1>
+      <div class="card">
+        <label>Name</label>
+        <input id="editUserName" value="${esc(user.name)}" maxlength="120">
+        <label>Email address</label>
+        <input id="editUserEmail" type="email" value="${esc(user.email)}">
+        <label>Set a new password (leave blank to keep current password)</label>
+        <input id="editUserPassword" type="password" minlength="10" maxlength="128" autocomplete="new-password">
+        <label>Role</label>
+        <select id="editUserRole" onchange="toggleUserCourses()">
+          <option value="learner" ${user.role==='learner'?'selected':''}>Learner</option>
+          <option value="instructor" ${user.role==='instructor'?'selected':''}>Course Instructor</option>
+          <option value="content_moderator" ${user.role==='content_moderator'?'selected':''}>Content Moderator</option>
+          <option value="assessor" ${user.role==='assessor'?'selected':''}>Assessor</option>
+          <option value="admin" ${user.role==='admin'?'selected':''}>Admin</option>
+        </select>
+      </div>
+      <div class="card" id="editUserCoursesCard" style="${user.role==='learner'?'':'display:none'}">
+        <h2>Assigned Courses</h2>
+        <p>Choose the courses this learner can access.</p>
+        ${(courses||[]).length ? courses.map(c=>`
+          <label style="display:block;margin:8px 0">
+            <input type="checkbox" name="editUserCourse" value="${esc(c.id)}" ${window.editUserActiveCourseIds.includes(Number(c.id))?'checked':''}>
+            ${esc(c.course_code||'')} — ${esc(c.title)}
+          </label>
+        `).join('') : '<p>No courses exist yet.</p>'}
+      </div>
+      <div class="card">
+        <div style="margin-top:16px;display:flex;gap:10px">
+          <button onclick="saveAdminUser(${user.id})">Save Changes</button>
+          <button class="secondary" onclick="adminUsers()">Cancel</button>
+        </div>
+      </div>
+    `);
+    await loadMediaPreviews(courseMedia);
+  }catch(e){
+    alert(e.message);
+  }
+}
+
+function toggleUserCourses(){
+  const card=$('#editUserCoursesCard');
+  if(card) card.style.display=$('#editUserRole').value==='learner'?'':'none';
+}
+
+async function saveAdminUser(id){
+  const name=$('#editUserName').value.trim();
+  const email=$('#editUserEmail').value.trim();
+  const password=$('#editUserPassword').value;
+  const role=$('#editUserRole').value;
+  if(name.length<2||!email){
+    alert('Enter a name with at least 2 characters and a valid email address.');
+    return;
+  }
+  if(password&&password.length<10){
+    alert('A new password must be at least 10 characters.');
+    return;
+  }
+  try{
+    const payload={name,email,role};
+    if(password) payload.password=password;
+    await api('/admin/users/'+id,{
+      method:'PATCH',
+      body:JSON.stringify(payload)
+    });
+    if(role==='learner'){
+      const selectedIds=[...document.querySelectorAll('input[name="editUserCourse"]:checked')].map(x=>Number(x.value));
+      const currentIds=window.editUserActiveCourseIds||[];
+      for(const courseId of selectedIds){
+        if(!currentIds.includes(courseId)) await api('/admin/users/'+id+'/courses/'+courseId,{method:'POST'});
+      }
+      for(const courseId of currentIds){
+        if(!selectedIds.includes(courseId)) await api('/admin/users/'+id+'/courses/'+courseId,{method:'DELETE'});
+      }
+    }
+    adminUsers();
+  }catch(e){
+    alert(e.message);
+  }
+}
+
+async function auditLogs(){
+  pushPage(auditLogs);
+
+  try{
+    const logs=await api('/admin/audit-logs');
+
+    shell(`
+      <div class="nav-row">${backButton()}</div>
+      <h1>&#128196; Audit Logs</h1>
+
+      <div class="card" style="overflow:auto">
+        <table>
+          <tr>
+            <th>ID</th>
+            <th>User</th>
+            <th>Action</th>
+            <th>Created</th>
+          </tr>
+
+          ${(logs||[]).map(x=>`
+            <tr>
+              <td>${esc(x.id)}</td>
+              <td>${esc(x.user_id||'-')}</td>
+              <td>${esc(x.action||x.event||'-')}</td>
+              <td>${esc(x.created_at||'-')}</td>
+            </tr>`).join('')}
+        </table>
+      </div>
+    `);
+  }catch(e){
+    shell(`<h1>Audit Logs</h1><div class="card"><p class="error">${esc(e.message)}</p></div>`);
+  }
+}
+
+start();
+</script>
+
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

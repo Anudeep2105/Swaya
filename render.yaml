@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: swaya-learning
+    runtime: docker
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: INITIAL_ADMIN_EMAIL
+        sync: false
+      - key: INITIAL_ADMIN_PASSWORD
+        sync: false
+      - key: SUPABASE_URL
+        value: https://bxvqiscdzjqpfwjnzdta.supabase.co
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: swaya-uploads
+      - key: MAX_MEDIA_MB
+        value: "50"
+      - key: DEV_RESET_TOKENS
+        value: "false"

@@ -1,0 +1,8 @@
+**
+!requirements.txt
+!app/
+!app/*.py
+app/*_before*.py
+app/__pycache__/
+!app/static/
+!app/static/index.html
