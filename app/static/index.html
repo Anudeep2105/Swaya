@@ -89,6 +89,21 @@ function esc(v){
     .replace(/'/g,'&#039;');
 }
 
+function formatApiError(data,status){
+  const detail=data?.detail;
+  if(typeof detail==='string')return detail;
+  if(Array.isArray(detail))return detail.map(issue=>{
+    const field=(issue?.loc||[]).filter(part=>part!=='body').pop()||'Request';
+    const label=String(field).replaceAll('_',' ').replace(/\b\w/g,c=>c.toUpperCase());
+    if(issue?.type==='missing')return `${label} is required.`;
+    if(field==='email'&&String(issue?.type||'').includes('email'))return 'Enter a valid email address.';
+    if(issue?.type==='string_too_short')return `${label} must be at least ${issue?.ctx?.min_length||'the required number of'} characters.`;
+    return `${label}: ${issue?.msg||'is invalid.'}`;
+  }).join(' ');
+  if(detail&&typeof detail==='object')return detail?.errors?.join(' ')||detail?.message||'The request could not be completed.';
+  return data?.message||('Request failed: '+status);
+}
+
 async function api(path,opts={}){
   const headers=opts.headers||{};
   if(!(opts.body instanceof FormData)) headers['Content-Type']='application/json';
@@ -102,10 +117,7 @@ async function api(path,opts={}){
   try{data=await r.json()}catch{}
 
   if(!r.ok){
-    const detail=data?.detail;
-    const message=typeof detail==='string'?detail:
-      detail?.errors?.join('\n')||detail?.message||data?.message||('Request failed: '+r.status);
-    throw new Error(message);
+    throw new Error(formatApiError(data,r.status));
   }
 
   return data;
@@ -322,12 +334,13 @@ function registerPage(){
 
         <form onsubmit="register(event)">
           <label>Name</label>
-          <input id="regName" autocomplete="name" required minlength="2" maxlength="120">
+          <input id="regName" autocomplete="name" required minlength="2" maxlength="120" placeholder="Your full name">
           <label>Email</label>
           <input id="regEmail" type="email" autocomplete="email" required>
 
           <label>Password</label>
-          <input id="regPassword" type="password" required>
+          <input id="regPassword" type="password" autocomplete="new-password" required minlength="10" maxlength="128" aria-describedby="regPasswordHelp">
+          <small id="regPasswordHelp" class="muted">Use at least 10 characters.</small>
 
           <button style="width:100%">Register</button>
         </form>
