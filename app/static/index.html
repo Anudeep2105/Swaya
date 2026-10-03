@@ -92,7 +92,10 @@ async function api(path,opts={}){
   try{data=await r.json()}catch{}
 
   if(!r.ok){
-    throw new Error(data?.detail||data?.message||('Request failed: '+r.status));
+    const detail=data?.detail;
+    const message=typeof detail==='string'?detail:
+      detail?.errors?.join('\n')||detail?.message||data?.message||('Request failed: '+r.status);
+    throw new Error(message);
   }
 
   return data;
@@ -1593,6 +1596,16 @@ async function loadCourseLessons(){
         <button onclick="newLesson(${courseId})">+ Add Lesson</button>
       </div>
 
+      <div class="card">
+        <h3>Upload day-wise lessons in bulk</h3>
+        <p class="muted">Prepare lessons in a spreadsheet, save it as CSV UTF-8, then upload it here. Each row creates one lesson for this course. Existing or repeated day numbers are rejected before anything is saved.</p>
+        <button class="secondary" onclick="downloadLessonCsvTemplate()">Download CSV template</button>
+        <label for="bulkLessonsFile">Choose CSV file</label>
+        <input id="bulkLessonsFile" type="file" accept=".csv,text/csv" onchange="bulkUploadLessons(${courseId})">
+        <div id="bulkLessonsMessage" class="muted"></div>
+        <p class="muted">Columns: day_number, title, goal, content_md, content_html, content_css, estimated_minutes, status. HTML and CSS notes are optional. Status can be draft or published.</p>
+      </div>
+
       <div class="card" style="overflow:auto">
         <table>
           <tr>
@@ -1623,6 +1636,41 @@ async function loadCourseLessons(){
         <p class="error">${esc(e.message)}</p>
       </div>
     `;
+  }
+}
+
+function downloadLessonCsvTemplate(){
+  const csv='day_number,title,goal,content_md,content_html,content_css,estimated_minutes,status\r\n1,Introduction,Explain the learning outcome,Write lesson text in Markdown,\"<h2>Lesson heading</h2><p>HTML notes go here.</p>\",,60,draft\r\n';
+  const blob=new Blob(['\ufeff',csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement('a');
+  link.href=url;
+  link.download='swaya-daywise-lessons-template.csv';
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function bulkUploadLessons(courseId){
+  const input=$('#bulkLessonsFile');
+  const message=$('#bulkLessonsMessage');
+  const file=input?.files?.[0];
+  if(!file||!message)return;
+  message.className='muted';
+  message.textContent='Uploading and checking all lesson rows…';
+  const body=new FormData();
+  body.append('file',file);
+  try{
+    const result=await api(`/admin/courses/${courseId}/lessons/bulk`,{method:'POST',body});
+    message.className='success';
+    message.textContent=`Added ${result.created} lessons for days ${result.days.join(', ')}.`;
+    await loadCourseLessons();
+    const refreshed=$('#bulkLessonsMessage');
+    if(refreshed){refreshed.className='success';refreshed.textContent=message.textContent;}
+  }catch(e){
+    message.className='error';
+    message.textContent=e.message;
+  }finally{
+    input.value='';
   }
 }
 

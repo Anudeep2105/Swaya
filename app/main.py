@@ -1,4 +1,4 @@
-import os, json, random, uuid, shutil, secrets
+import os, json, random, uuid, shutil, secrets, csv, io
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import mimetypes
@@ -787,6 +787,90 @@ def create_lesson(
         'day_number':lesson.day_number,
         'title':lesson.title
     }
+
+@app.post('/api/admin/courses/{course_id}/lessons/bulk')
+async def bulk_create_lessons(
+    course_id:int,
+    file:UploadFile=File(...),
+    user=Depends(require_roles('admin','content_moderator','instructor')),
+    db:Session=Depends(get_db)
+):
+    course=db.get(Course,course_id)
+    if not course:
+        raise HTTPException(404,'Course not found')
+    if Path(file.filename or '').suffix.lower() != '.csv':
+        raise HTTPException(400,'Upload a CSV file. Excel workbooks should be saved as CSV UTF-8 first.')
+    raw=await file.read(2*1024*1024+1)
+    await file.close()
+    if len(raw)>2*1024*1024:
+        raise HTTPException(413,'CSV file is too large (maximum 2 MB).')
+    try:
+        text_data=raw.decode('utf-8-sig')
+        reader=csv.DictReader(io.StringIO(text_data))
+    except (UnicodeDecodeError,csv.Error) as exc:
+        raise HTTPException(400,'Could not read the CSV. Save it as UTF-8 CSV and try again.') from exc
+    required={'day_number','title'}
+    headers={h.strip().lower() for h in (reader.fieldnames or []) if h}
+    if not required.issubset(headers):
+        raise HTTPException(400,'CSV needs day_number and title columns. Download the template for all supported columns.')
+    rows=[]
+    errors=[]
+    seen=set()
+    allowed={'day_number','title','goal','content_md','content_html','content_css','estimated_minutes','status'}
+    for line,row in enumerate(reader,start=2):
+        if line>367:
+            errors.append('CSV may contain at most 365 lessons.')
+            break
+        normalized={(k or '').strip().lower():(v or '').strip() for k,v in row.items() if k}
+        if not any(normalized.values()):
+            continue
+        try:
+            day=int(normalized.get('day_number',''))
+            if not 1<=day<=365: raise ValueError
+        except ValueError:
+            errors.append(f'Row {line}: day_number must be a whole number from 1 to 365.')
+            continue
+        title=normalized.get('title','')
+        if not title:
+            errors.append(f'Row {line}: title is required.')
+            continue
+        if len(title)>200:
+            errors.append(f'Row {line}: title must be 200 characters or fewer.')
+            continue
+        if day in seen:
+            errors.append(f'Row {line}: day {day} appears more than once in this CSV.')
+            continue
+        seen.add(day)
+        try:
+            minutes=int(normalized.get('estimated_minutes') or 60)
+            if not 1<=minutes<=1440: raise ValueError
+        except ValueError:
+            errors.append(f'Row {line}: estimated_minutes must be from 1 to 1440.')
+            continue
+        status=normalized.get('status') or 'published'
+        if status not in {'draft','published'}:
+            errors.append(f'Row {line}: status must be draft or published.')
+            continue
+        lesson_data={key:normalized.get(key,'') for key in allowed if key not in {'day_number','title','estimated_minutes','status'}}
+        rows.append({'day_number':day,'title':title,'estimated_minutes':minutes,'status':status,**lesson_data})
+    if not rows and not errors:
+        errors.append('CSV contains no lesson rows.')
+    existing=set(db.scalars(select(Lesson.day_number).where(Lesson.course_id==course_id,Lesson.day_number.in_(seen))).all()) if seen else set()
+    for day in sorted(existing):
+        errors.append(f'Course already has a lesson for day {day}. Remove that row or choose another day number.')
+    if errors:
+        raise HTTPException(400,{'message':'No lessons were imported. Fix the following issues and upload again.','errors':errors[:50]})
+    lessons=[]
+    for row in rows:
+        lesson=Lesson(course_id=course_id,lesson_code=generate_lesson_code(course,row['title'],row['day_number'],db),objectives_json='[]',resources_json='[]',**row)
+        db.add(lesson)
+        lessons.append(lesson)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(409,'Lessons could not be imported because another change used one of these day numbers. Refresh and retry.')
+    return {'created':len(lessons),'course_id':course_id,'days':[l.day_number for l in lessons]}
 
 @app.put('/api/admin/lessons/{lesson_id}')
 def update_lesson(lesson_id:int,x:LessonIn,course_id:int,user=Depends(require_roles('admin','content_moderator','instructor')),db:Session=Depends(get_db)):
