@@ -1074,7 +1074,7 @@ let spreadsheetActive='A1';
 function spreadsheetAddress(row,col){let label='';for(col++;col;col=Math.floor((col-1)/26))label=String.fromCharCode(65+(col-1)%26)+label;return label+(row+1)}
 function spreadsheetTokens(expression){
   const text=expression.replace(/^=/,'').toUpperCase();
-  const tokens=text.match(/[A-Z]+[1-9]\d*|\d+(?:\.\d+)?|[()+\-*/:,]/g)||[];
+  const tokens=text.match(/[A-Z]+[1-9]\d*|[A-Z]+|\d+(?:\.\d+)?|[()+\-*/:,]/g)||[];
   if(tokens.join('')!==text.replace(/\s/g,''))throw Error('Check the formula syntax.');
   return tokens;
 }
