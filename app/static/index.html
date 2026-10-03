@@ -59,6 +59,7 @@ code{font-family:Consolas,monospace}
 .course-choice input{width:auto;flex:0 0 auto;margin:3px 0 0}
 .course-choice span{display:block}
 .construction-notice{padding:13px 18px;background:#fffaeb;border:1px solid #fedf89;border-radius:10px;color:#93370d;margin:14px 0 22px}
+.sheet-wrap{overflow:auto;border:1px solid #d0d5dd;border-radius:10px;background:#fff}.sheet{border-collapse:separate;border-spacing:0;min-width:760px}.sheet th,.sheet td{padding:0;border-right:1px solid #eaecf0;border-bottom:1px solid #eaecf0}.sheet th{height:32px;text-align:center;color:#475467}.sheet .row-head{width:44px;min-width:44px;text-align:center;background:#f9fafb}.sheet-cell{width:100%;min-width:96px;height:36px;border:0!important;border-radius:0!important;margin:0!important;padding:7px 9px!important;background:transparent}.sheet-cell:focus{outline:2px solid #2563eb;outline-offset:-2px;position:relative}.sheet-toolbar{display:grid;grid-template-columns:70px 1fr;gap:8px;align-items:center;margin:12px 0}.sheet-toolbar input{margin:0;font-family:Consolas,monospace}
 @media(max-width:800px){
  .sidebar{position:static;width:100%;height:auto}
  .app{display:block}
@@ -438,6 +439,7 @@ function shell(content){
         <button onclick="aboutPage()">&#8505; About Swaya</button>
         <button onclick="feedbackPage()">&#128172; Feedback</button>
         <button onclick="course()">&#128218; Course</button>
+        <button onclick="spreadsheetLab()">&#128202; Spreadsheet Practice</button>
         <button onclick="gamification()">&#128202; Progress</button>
         <button onclick="leaderboard()">&#127942; Leaderboard</button>
         <button onclick="certificate()">&#127941; Certificate</button>
@@ -762,7 +764,8 @@ async function lesson(id){
       <div class="card">
         <h2>Practice</h2>
         <div class="nav-row">
-          <button onclick="pythonLab(${id})">&#128187; Python Practice Lab</button>
+        <button onclick="pythonLab(${id})">&#128187; Python Practice Lab</button>
+        <button class="secondary" onclick="spreadsheetLab()">&#128202; Spreadsheet Practice</button>
           <button onclick="takeQuiz(${id})">&#128202; Take Assessment</button>
         </div>
 
@@ -1063,6 +1066,48 @@ function selectPythonExercise(i,lessonId){
   pythonIndex=i;
   renderPythonLab(lessonId);
 }
+
+const spreadsheetRows=10,spreadsheetCols=6;
+const spreadsheetStarter={A1:'Product',B1:'Units sold',C1:'Price each',D1:'Revenue',A2:'Notebook',B2:'25',C2:'10',A3:'Pen set',B3:'18',C3:'40',A4:'Folder',B4:'30',C4:'10',A5:'Planner',B5:'12',C5:'40',A6:'TOTAL',A8:'Tip: enter a formula in the formula bar, such as =B2*C2 or =SUM(D2:D5).'};
+let spreadsheetCells={...spreadsheetStarter};
+let spreadsheetActive='A1';
+function spreadsheetAddress(row,col){let label='';for(col++;col;col=Math.floor((col-1)/26))label=String.fromCharCode(65+(col-1)%26)+label;return label+(row+1)}
+function spreadsheetTokens(expression){
+  const text=expression.replace(/^=/,'').toUpperCase();
+  const tokens=text.match(/[A-Z]+[1-9]\d*|\d+(?:\.\d+)?|[()+\-*/:,]/g)||[];
+  if(tokens.join('')!==text.replace(/\s/g,''))throw Error('Check the formula syntax.');
+  return tokens;
+}
+function spreadsheetValue(address,stack=new Set()){
+  if(stack.has(address))throw Error('Circular reference');
+  const raw=String(spreadsheetCells[address]??'').trim();
+  if(!raw)return 0;
+  if(!raw.startsWith('=')){const n=Number(raw);return Number.isFinite(n)&&raw!==''?n:raw}
+  const next=new Set(stack);next.add(address);const tokens=spreadsheetTokens(raw);let i=0;
+  const peek=()=>tokens[i];const take=()=>tokens[i++];
+  const range=(first,last)=>{const a=first.match(/^([A-Z]+)(\d+)$/),b=last.match(/^([A-Z]+)(\d+)$/);if(!a||!b)throw Error('Invalid cell range');const colNum=s=>[...s].reduce((n,ch)=>n*26+ch.charCodeAt(0)-64,0);const c1=colNum(a[1]),c2=colNum(b[1]),r1=Number(a[2]),r2=Number(b[2]);const out=[];for(let r=Math.min(r1,r2);r<=Math.max(r1,r2);r++)for(let c=Math.min(c1,c2);c<=Math.max(c1,c2);c++){let col='',n=c;while(n){const rem=(n-1)%26;col=String.fromCharCode(65+rem)+col;n=Math.floor((n-1)/26)}out.push(spreadsheetValue(col+r,next))}return out};
+  const primary=()=>{if(peek()==='-'){take();return -primary()}if(peek()==='+'){take();return primary()}if(peek()==='('){take();const n=expr();if(take()!==')')throw Error('Add a closing parenthesis');return n}const t=take();if(!t)throw Error('Incomplete formula');if(/^\d/.test(t))return Number(t);if(/^[A-Z]+\d+$/.test(t)){if(peek()===':'){take();const end=take();if(!end||!/^[A-Z]+\d+$/.test(end))throw Error('Invalid cell range');return range(t,end)}return spreadsheetValue(t,next)}if(/^[A-Z]+$/.test(t)&&peek()==='('){take();const args=[];if(peek()!==')'){while(true){if(/^[A-Z]+\d+$/.test(peek()||'')&&tokens[i+1]===':'){const start=take();take();const end=take();args.push(...range(start,end))}else args.push(expr());if(peek()!==',')break;take()}}if(take()!==')')throw Error('Add a closing parenthesis');const nums=args.flat().filter(v=>typeof v==='number');if(t==='SUM')return nums.reduce((a,b)=>a+b,0);if(t==='AVERAGE')return nums.length?nums.reduce((a,b)=>a+b,0)/nums.length:0;if(t==='MIN')return Math.min(...nums);if(t==='MAX')return Math.max(...nums);if(t==='COUNT')return nums.length;throw Error('Function not supported yet: '+t)}throw Error('Formula contains an invalid cell reference')};
+  const term=()=>{let n=primary();while(peek()==='*'||peek()==='/'){const op=take(),rhs=primary();n=op==='*'?n*rhs:n/rhs}return n};
+  const expr=()=>{let n=term();while(peek()==='+'||peek()==='-'){const op=take(),rhs=term();n=op==='+'?n+rhs:n-rhs}return n};
+  const result=expr();if(i<tokens.length)throw Error('Check the formula syntax.');if(!Number.isFinite(result))throw Error('Formula result is not a number');return result;
+}
+function spreadsheetDisplay(address){try{const v=spreadsheetValue(address);return typeof v==='number'?String(Math.round((v+Number.EPSILON)*100)/100):String(v)}catch(e){return '#ERROR'}}
+function spreadsheetLab(){pushPage(spreadsheetLab);renderSpreadsheetLab()}
+function renderSpreadsheetLab(message=''){
+  const letters=Array.from({length:spreadsheetCols},(_,i)=>spreadsheetAddress(0,i).replace(/\d/g,''));
+  shell(`<div class="nav-row">${backButton()}</div><h1>&#128202; Spreadsheet Practice</h1><p class="muted">Practice spreadsheet formulas in a small, editable workbook. Your work stays in this browser tab.</p>
+    <div class="card"><span class="pill">Challenge 1 · Sales report</span><h2>Calculate revenue and total sales</h2><p>For each product, calculate <strong>Units sold × Price each</strong> in column D. Then calculate total revenue in cell D6 with <code>=SUM(D2:D5)</code>. Select a cell, enter its value or formula in the formula bar, and press Enter. To paste spreadsheet data, copy a tab-separated block, select its starting cell, then paste.</p><p class="muted">Supported formulas: cell arithmetic (+, −, ×, ÷) and SUM, AVERAGE, MIN, MAX, COUNT. Examples: <code>=B2*C2</code>, <code>=SUM(D2:D5)</code>.</p>
+    <div class="sheet-toolbar"><strong id="sheetAddress">${esc(spreadsheetActive)}</strong><input id="sheetFormula" aria-label="Cell value or formula" value="${esc(spreadsheetCells[spreadsheetActive]||'')}" onkeydown="spreadsheetFormulaKey(event)" onblur="saveSpreadsheetFormula()" onpaste="pasteSpreadsheet(event,spreadsheetActive)" placeholder="Cell value or formula"></div>
+    <div class="sheet-wrap"><table class="sheet"><thead><tr><th class="row-head"></th>${letters.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${Array.from({length:spreadsheetRows},(_,r)=>`<tr><th class="row-head">${r+1}</th>${letters.map((c,col)=>{const a=spreadsheetAddress(r,col);return `<td><input class="sheet-cell" aria-label="${a}" readonly value="${esc(spreadsheetDisplay(a))}" onclick="selectSpreadsheetCell('${a}')" onpaste="pasteSpreadsheet(event,'${a}')"></td>`}).join('')}</tr>`).join('')}</tbody></table></div>
+    <div class="nav-row" style="margin-top:14px"><button onclick="checkSpreadsheetWork()">Check my work</button><button class="secondary" onclick="resetSpreadsheet()">Reset sheet</button></div><div id="sheetFeedback" class="${message?'success':''}">${esc(message)}</div></div>`);
+}
+function selectSpreadsheetCell(address){spreadsheetActive=address;const editor=$('#sheetFormula');if($('#sheetAddress'))$('#sheetAddress').textContent=address;if(editor){editor.value=spreadsheetCells[address]||'';editor.focus()}}
+function saveSpreadsheetFormula(){if($('#sheetFormula'))spreadsheetCells[spreadsheetActive]=$('#sheetFormula').value}
+function commitSpreadsheetCell(){if(!$('#sheetFormula'))return;saveSpreadsheetFormula();const address=spreadsheetActive;renderSpreadsheetLab();const target=document.querySelector(`[aria-label="${address}"]`);if(target)target.focus()}
+function spreadsheetFormulaKey(event){if(event.key==='Enter'){event.preventDefault();commitSpreadsheetCell()}else if(event.key==='Tab'){event.preventDefault();commitSpreadsheetCell();const m=spreadsheetActive.match(/^([A-Z]+)(\d+)$/);if(m){const n=[...m[1]].reduce((a,c)=>a*26+c.charCodeAt(0)-64,0);selectSpreadsheetCell(spreadsheetAddress(Number(m[2])-1,Math.min(spreadsheetCols-1,n)))}}}
+function pasteSpreadsheet(event,address){const text=event.clipboardData?.getData('text');if(!text||!text.includes('\t'))return;event.preventDefault();const start=address.match(/^([A-Z]+)(\d+)$/);const startCol=[...start[1]].reduce((n,c)=>n*26+c.charCodeAt(0)-64,0)-1,startRow=Number(start[2])-1;text.split(/\r?\n/).filter((line,i,all)=>line||i<all.length-1).forEach((line,r)=>line.split('\t').forEach((value,c)=>{const col=startCol+c,row=startRow+r;if(row<spreadsheetRows&&col<spreadsheetCols)spreadsheetCells[spreadsheetAddress(row,col)]=value}));renderSpreadsheetLab('Pasted spreadsheet cells.');}
+function checkSpreadsheetWork(){const expected={'D2':250,'D3':720,'D4':300,'D5':480,'D6':1750};const misses=Object.entries(expected).filter(([cell,value])=>Number(spreadsheetDisplay(cell))!==value);const box=$('#sheetFeedback');if(box)box.innerHTML=misses.length?`<span class="warning">Keep going: check ${misses.map(([cell])=>cell).join(', ')}. Use <code>=B2*C2</code> for each product row and <code>=SUM(D2:D5)</code> in D6.</span>`:'<span class="success">Great work! Your product revenues and total are correct.</span>';}
+function resetSpreadsheet(){spreadsheetCells={...spreadsheetStarter};spreadsheetActive='A1';renderSpreadsheetLab('Sheet reset. Try entering formulas in D2 through D6.')}
 
 function resetPythonCode(){
   const x=pythonExercises[pythonIndex];
