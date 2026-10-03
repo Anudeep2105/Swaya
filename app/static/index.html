@@ -1966,7 +1966,7 @@ async function saveLesson(id){
 
     await api(
       '/admin/lessons/'+id+
-      '?course_id='+encodeURIComponent(window.currentCourseId||1),
+      '?course_id='+encodeURIComponent(existing.course_id),
       {
         method:'PUT',
         body:JSON.stringify({

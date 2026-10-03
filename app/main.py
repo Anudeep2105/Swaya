@@ -592,7 +592,7 @@ def lesson(lesson_id:int,user=Depends(current_user),db:Session=Depends(get_db)):
     a=db.scalars(select(Assignment).where(Assignment.lesson_id==lesson_id)).all()
     media=db.scalars(select(CourseMedia).where(CourseMedia.lesson_id==lesson_id).order_by(CourseMedia.id)).all()
     tasks=[{'index':i,'text':t,'done':False} for i,t in enumerate(['Read the lesson','Complete the practical assignment','Pass the assessment'],1)]
-    return {'id':l.id,'day_number':l.day_number,'title':l.title,'goal':l.goal,'content_md':l.content_md,'content_html':l.content_html,'content_css':l.content_css,'objectives':json.loads(l.objectives_json),'resources':json.loads(l.resources_json),'media':[media_output(x) for x in media],'learning_complete':bool(p and p.learning_complete),'completed':bool(p and p.completed),'best_score':p.best_score if p else 0,'attempts':p.attempts if p else 0,'assignments':[{'id':x.id,'title':x.title,'description':x.description,'max_score':x.max_score,'due_date':x.due_date} for x in a],'tasks':tasks}
+    return {'id':l.id,'course_id':l.course_id,'day_number':l.day_number,'title':l.title,'goal':l.goal,'content_md':l.content_md,'content_html':l.content_html,'content_css':l.content_css,'objectives':json.loads(l.objectives_json),'resources':json.loads(l.resources_json),'media':[media_output(x) for x in media],'learning_complete':bool(p and p.learning_complete),'completed':bool(p and p.completed),'best_score':p.best_score if p else 0,'attempts':p.attempts if p else 0,'assignments':[{'id':x.id,'title':x.title,'description':x.description,'max_score':x.max_score,'due_date':x.due_date} for x in a],'tasks':tasks}
 
 @app.get('/api/media/{media_id}')
 def get_course_media_file(media_id:int,user=Depends(current_user),db:Session=Depends(get_db)):
@@ -755,6 +755,9 @@ def create_lesson(
     if not course:
         raise HTTPException(404,'Course not found')
 
+    if db.scalar(select(Lesson).where(Lesson.course_id==course_id,Lesson.day_number==x.day_number)):
+        raise HTTPException(409,f'Course already has a lesson for day {x.day_number}. Choose another day number.')
+
     data=x.model_dump()
 
     lesson_code=generate_lesson_code(
@@ -789,6 +792,9 @@ def create_lesson(
 def update_lesson(lesson_id:int,x:LessonIn,course_id:int,user=Depends(require_roles('admin','content_moderator','instructor')),db:Session=Depends(get_db)):
     l=db.get(Lesson,lesson_id)
     if not l: raise HTTPException(404,'Lesson not found')
+    if not db.get(Course,course_id): raise HTTPException(404,'Course not found')
+    duplicate=db.scalar(select(Lesson).where(Lesson.course_id==course_id,Lesson.day_number==x.day_number,Lesson.id!=lesson_id))
+    if duplicate: raise HTTPException(409,f'Course already has a lesson for day {x.day_number}. Choose another day number.')
     data=x.model_dump()
     l.course_id=course_id
     l.objectives_json=json.dumps(data.pop('objectives',[]))
