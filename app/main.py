@@ -1204,7 +1204,7 @@ def audit_logs(user=Depends(require_roles('admin')),db:Session=Depends(get_db)):
 @app.get('/api/admin/public-requests')
 def admin_public_requests(user=Depends(require_roles('admin')),db:Session=Depends(get_db)):
     rows=db.execute(select(PublicRequest,Course.title).outerjoin(Course,Course.id==PublicRequest.course_id).order_by(desc(PublicRequest.created_at)).limit(500)).all()
-    return [{'id:r.id,'name':r.name,'email':r.email,'request_type':r.request_type,'course':title or '', 'message':r.message,'status':r.status,'created_at':r.created_at.isoformat()} for r,title in rows]
+    return [{'id':r.id,'name':r.name,'email':r.email,'request_type':r.request_type,'course':title or '', 'message':r.message,'status':r.status,'created_at':r.created_at.isoformat()} for r,title in rows]
 
 @app.patch('/api/admin/public-requests/{request_id}')
 def update_public_request(request_id:int,x:PublicRequestStatusIn,user=Depends(require_roles('admin')),db:Session=Depends(get_db)):
