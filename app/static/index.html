@@ -1644,6 +1644,22 @@ function newLesson(courseId){
       <label>Lesson Content</label>
       <textarea id="newLessonContent" rows="12" placeholder="Enter lesson content in Markdown"></textarea>
 
+      <label>HTML + CSS Lesson Notes</label>
+      <textarea
+        id="newLessonHtmlCss"
+        style="min-height:350px;width:100%;font-family:Consolas,monospace;font-size:14px;line-height:1.5"
+        oninput="previewNewLessonHtml()"
+        placeholder="Write HTML here. Put optional CSS inside a <style>...</style> block."
+      ></textarea>
+      <div style="margin-top:10px;padding:12px;background:#f5f7fa;border-radius:8px;font-size:13px">
+        HTML notes will be shown to learners instead of Markdown when both fields contain content.
+      </div>
+      <h3>HTML + CSS Preview</h3>
+      <div
+        id="newLessonHtmlPreview"
+        style="border:1px solid #ccc;border-radius:8px;padding:20px;background:#fff;min-height:100px"
+      ></div>
+
       <label>Estimated Minutes</label>
       <input id="newLessonMinutes" type="number" min="1" value="60">
 
@@ -1660,6 +1676,12 @@ async function saveNewLesson(courseId){
   const title=$('#newLessonTitle').value.trim();
   const goal=$('#newLessonGoal').value.trim();
   const content_md=$('#newLessonContent').value;
+  const htmlCssSource=$('#newLessonHtmlCss').value||'';
+  const content_html=htmlCssSource.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi,'').trim();
+  const content_css=[...htmlCssSource.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)]
+    .map(match=>match[1].trim())
+    .filter(Boolean)
+    .join('\n\n');
   const estimated_minutes=Number($('#newLessonMinutes').value)||60;
 
   if(!day){
@@ -1682,8 +1704,8 @@ async function saveNewLesson(courseId){
           title:title,
           goal:goal,
           content_md:content_md,
-          content_html:'',
-          content_css:'',
+          content_html:content_html,
+          content_css:content_css,
           objectives:[],
           resources:[],
           status:'published',
@@ -1805,6 +1827,15 @@ function previewLessonHtml(){
   const source=editor.value||'';
 
   preview.innerHTML=source;
+}
+
+function previewNewLessonHtml(){
+  const preview=$('#newLessonHtmlPreview');
+  const editor=$('#newLessonHtmlCss');
+
+  if(!preview || !editor)return;
+
+  preview.innerHTML=editor.value||'';
 }
 
 function renderLessonObjectives(){
