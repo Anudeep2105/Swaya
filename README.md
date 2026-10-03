@@ -22,6 +22,12 @@ Swaya is configured for a free Render web service with Supabase Postgres and pri
    - `SUPABASE_SERVICE_ROLE_KEY`: Supabase's server-only secret key. Never use this key in browser code or commit it to GitHub.
 4. Keep `SUPABASE_URL` and `SUPABASE_STORAGE_BUCKET` as defined in `render.yaml`. The bucket `swaya-uploads` must remain private.
 
+### Administrator protection and request email
+
+Administrator sign-in requires a six-digit code from an authenticator app. On the first administrator sign-in, Swaya requires authenticator enrollment before issuing an access token. The setup key is shown once; add it to an authenticator app and confirm its current code.
+
+Public contributor, content developer, and learner resource-access requests are saved in the database and appear in the administrator's **Public Requests** menu. To also email each request, configure these environment values on the web service: `ADMIN_EMAIL` (or use `INITIAL_ADMIN_EMAIL`), `SMTP_HOST`, `SMTP_PORT` (usually `587`), `SMTP_USER`, `SMTP_PASSWORD`, and `SMTP_FROM`. `SMTP_STARTTLS` defaults to `true`. Use an email provider's SMTP credentials and keep the password in the host's secret settings. Without SMTP settings, requests are still saved for review, and the submitter is told email notification is unavailable.
+
 Uploaded lesson media, assignment files, and certificate PDFs are stored in Supabase Storage. The free tier allows up to 50 MB per object and 1 GB total file storage. Render's free service can sleep when idle, and Supabase free projects may pause after a week of low activity; this setup is for a small pilot rather than a high-availability production service.
 
 The cloud database starts fresh with the 30-day course seed and the administrator configured above. Local user accounts, progress, and uploaded files are not copied automatically.

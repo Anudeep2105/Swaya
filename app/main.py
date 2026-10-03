@@ -1,4 +1,5 @@
-import os, json, random, uuid, shutil, secrets, csv, io
+import os, json, random, uuid, shutil, secrets, csv, io, smtplib, ssl, logging, base64
+from email.message import EmailMessage
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import mimetypes
@@ -535,12 +536,19 @@ def tokens(u): return {'access_token':make_token(u),'refresh_token':make_token(u
 def login(request:Request,x:LoginIn,db:Session=Depends(get_db)):
     u=db.scalar(select(User).where(User.email==x.email.lower()))
     if not u or not verify_password(x.password,u.password_hash) or not u.active: raise HTTPException(401,'Invalid email or password')
+    if u.role=='admin' and not u.mfa_enabled:
+        return {'mfa_setup_required':True,'setup_token':make_token(u,'mfa_setup')}
+    if u.role=='admin':
+        import pyotp
+        if not x.mfa_code or not u.mfa_secret or not pyotp.TOTP(u.mfa_secret).verify(x.mfa_code):
+            raise HTTPException(401,'Authenticator code required')
     audit(db,u,'login','user',u.id,request); db.commit(); return tokens(u)
 
 @app.post('/api/auth/refresh')
 def refresh(x:RefreshIn,db:Session=Depends(get_db)):
     p=decode(x.refresh_token,'refresh'); u=db.get(User,int(p['sub']));
     if not u or not u.active: raise HTTPException(401,'Account unavailable')
+    if u.role=='admin' and (not u.mfa_enabled or p.get('mfa') is not True): raise HTTPException(401,'Administrator must sign in with an authenticator code again')
     return {'access_token':make_token(u),'token_type':'bearer'}
 
 @app.get('/api/me')
@@ -553,6 +561,50 @@ def courses(user=Depends(current_user),db:Session=Depends(get_db)):
     else:
         cs=db.scalars(select(Course).where(Course.status=='published').order_by(Course.id)).all()
     return [{'id':c.id,'course_code':c.course_code,'title':c.title,'slug':c.slug,'description':c.description} for c in cs]
+
+@app.get('/api/public/courses')
+def public_courses(db:Session=Depends(get_db)):
+    rows=db.scalars(select(Course).where(Course.status=='published').order_by(Course.id)).all()
+    return [{'id':c.id,'course_code':c.course_code,'title':c.title,'slug':c.slug,'description':c.description,'lesson_count':db.scalar(select(func.count()).select_from(Lesson).where(Lesson.course_id==c.id)) or 0} for c in rows]
+
+def email_admin_about_request(entry,course_title=''):
+    admin_email=os.getenv('ADMIN_EMAIL') or os.getenv('INITIAL_ADMIN_EMAIL','')
+    host=os.getenv('SMTP_HOST','')
+    sender=os.getenv('SMTP_FROM') or os.getenv('SMTP_USER','')
+    if not (admin_email and host and sender):
+        return False
+    message=EmailMessage()
+    message['Subject']=f"Swaya request: {entry.request_type.replace('_',' ').title()}"
+    message['From']=sender
+    message['To']=admin_email
+    message['Reply-To']=entry.email
+    message.set_content(f"A new request was submitted on Swaya.\n\nType: {entry.request_type}\nName: {entry.name}\nEmail: {entry.email}\nCourse/resource: {course_title or 'Not specified'}\n\nMessage:\n{entry.message or '(No extra details)'}\n\nRequest ID: {entry.id}")
+    port=int(os.getenv('SMTP_PORT','587'))
+    with smtplib.SMTP(host,port,timeout=15) as server:
+        if os.getenv('SMTP_STARTTLS','true').lower()=='true': server.starttls(context=ssl.create_default_context())
+        if os.getenv('SMTP_USER'):
+            server.login(os.getenv('SMTP_USER'),os.getenv('SMTP_PASSWORD',''))
+        server.send_message(message)
+    return True
+
+@app.post('/api/public/requests')
+@limiter.limit('5/minute')
+def submit_public_request(request:Request,x:PublicRequestIn,db:Session=Depends(get_db)):
+    if x.request_type not in {'contributor','content_developer','learner_access'}:
+        raise HTTPException(400,'Choose contributor, content developer, or learner resource access.')
+    course=None
+    if x.course_id is not None:
+        course=db.get(Course,x.course_id)
+        if not course or course.status!='published': raise HTTPException(400,'Choose a published course or resource.')
+    entry=PublicRequest(name=x.name.strip(),email=str(x.email).lower(),request_type=x.request_type,course_id=course.id if course else None,message=x.message.strip())
+    db.add(entry); db.commit(); db.refresh(entry)
+    try:
+        email_sent=email_admin_about_request(entry,course.title if course else '')
+    except Exception as exc:
+        logging.getLogger(__name__).warning('Could not email administrator about public request %s: %s',entry.id,exc)
+        email_sent=False
+    audit(db,None,'public_request','request',entry.id,request); db.commit()
+    return {'ok':True,'email_sent':email_sent,'message':'Your request has been received.' if email_sent else 'Your request has been saved. Email notification is temporarily unavailable; the Swaya administrator can still review it.'}
 
 @app.get('/api/courses/{course_id}/media')
 def course_media(course_id:int,user=Depends(current_user),db:Session=Depends(get_db)):
@@ -1149,6 +1201,21 @@ def admin_user_update(user_id:int,x:UserAdminIn,user=Depends(require_roles('admi
 def audit_logs(user=Depends(require_roles('admin')),db:Session=Depends(get_db)):
     rows=db.scalars(select(AuditLog).order_by(desc(AuditLog.created_at)).limit(500)).all(); return [{'id':x.id,'user_id':x.user_id,'action':x.action,'entity':x.entity,'entity_id':x.entity_id,'ip':x.ip_address,'at':x.created_at.isoformat()} for x in rows]
 
+@app.get('/api/admin/public-requests')
+def admin_public_requests(user=Depends(require_roles('admin')),db:Session=Depends(get_db)):
+    rows=db.execute(select(PublicRequest,Course.title).outerjoin(Course,Course.id==PublicRequest.course_id).order_by(desc(PublicRequest.created_at)).limit(500)).all()
+    return [{'id:r.id,'name':r.name,'email':r.email,'request_type':r.request_type,'course':title or '', 'message':r.message,'status':r.status,'created_at':r.created_at.isoformat()} for r,title in rows]
+
+@app.patch('/api/admin/public-requests/{request_id}')
+def update_public_request(request_id:int,x:PublicRequestStatusIn,user=Depends(require_roles('admin')),db:Session=Depends(get_db)):
+    entry=db.get(PublicRequest,request_id)
+    if not entry: raise HTTPException(404,'Request not found')
+    if x.status not in {'new','reviewed','approved','declined'}: raise HTTPException(400,'Status must be new, reviewed, approved, or declined.')
+    entry.status=x.status
+    audit(db,user,'update','public_request',entry.id)
+    db.commit()
+    return {'ok':True}
+
 @app.post('/api/auth/password-reset/request')
 @limiter.limit('5/minute')
 def reset_request(request:Request,email:EmailStr,db:Session=Depends(get_db)):
@@ -1177,15 +1244,23 @@ def verify_request(request:Request,user=Depends(current_user),db:Session=Depends
     raw=random_token(); db.add(SecurityToken(user_id=user.id,token_hash=token_hash(raw),kind='email_verify',expires_at=datetime.now(timezone.utc)+timedelta(hours=24))); db.commit(); return {'ok':True,'dev_token':raw} if os.getenv('DEV_RESET_TOKENS','false').lower()=='true' else {'ok':True}
 
 @app.post('/api/auth/mfa/setup')
-def mfa_setup(user=Depends(current_user),db:Session=Depends(get_db)):
+def mfa_setup(x:MFASetupIn,db:Session=Depends(get_db)):
     import pyotp
-    secret=pyotp.random_base32(); user.mfa_secret=secret; db.commit(); return {'secret':secret,'otpauth_url':pyotp.totp.TOTP(secret).provisioning_uri(name=user.email,issuer_name='Swaya')}
+    payload=decode(x.setup_token,'mfa_setup'); user=db.get(User,int(payload['sub']))
+    if not user or not user.active or user.role!='admin' or user.mfa_enabled: raise HTTPException(401,'Administrator setup session is invalid. Sign in again.')
+    secret=pyotp.random_base32(); user.mfa_secret=secret; db.commit()
+    provisioning_uri=pyotp.totp.TOTP(secret).provisioning_uri(name=user.email,issuer_name='Swaya')
+    import qrcode
+    image=qrcode.make(provisioning_uri); buffer=io.BytesIO(); image.save(buffer,format='PNG')
+    return {'secret':secret,'otpauth_url':provisioning_uri,'qr_data_uri':'data:image/png;base64,'+base64.b64encode(buffer.getvalue()).decode('ascii')}
 
 @app.post('/api/auth/mfa/enable')
-def mfa_enable(x:MFAIn,user=Depends(current_user),db:Session=Depends(get_db)):
+def mfa_enable(x:MFAEnableIn,request:Request,db:Session=Depends(get_db)):
     import pyotp
-    if not user.mfa_secret or not pyotp.TOTP(user.mfa_secret).verify(x.code): raise HTTPException(400,'Invalid MFA code')
-    user.mfa_enabled=True; db.commit(); return {'ok':True}
+    payload=decode(x.setup_token,'mfa_setup'); user=db.get(User,int(payload['sub']))
+    if not user or not user.active or user.role!='admin' or user.mfa_enabled: raise HTTPException(401,'Administrator setup session is invalid. Sign in again.')
+    if not user.mfa_secret or not pyotp.TOTP(user.mfa_secret).verify(x.code): raise HTTPException(400,'Invalid authenticator code. Check the code and try again.')
+    user.mfa_enabled=True; audit(db,user,'enable_mfa','user',user.id,request); db.commit(); return tokens(user)
 
 @app.get('/')
 def index(): return FileResponse(STATIC/'index.html')

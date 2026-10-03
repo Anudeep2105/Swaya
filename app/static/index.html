@@ -46,10 +46,19 @@ pre{background:#101828;color:#f8fafc;padding:15px;border-radius:8px;overflow:aut
 code{font-family:Consolas,monospace}
 .question{border:1px solid #eaecf0;border-radius:10px;padding:18px;margin-bottom:15px}
 .option{display:block;padding:8px;margin:5px 0}
+.public-nav{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px max(20px,calc((100% - 1200px)/2));background:#101828;color:#fff}
+.public-nav strong{font-size:21px}.public-nav .nav-row{margin:0}
+.public-wrap{max-width:1200px;margin:auto;padding:32px 20px 64px}
+.hero{padding:56px 42px;border-radius:22px;background:linear-gradient(125deg,#112b4e,#2563eb);color:white;margin:12px 0 32px}
+.hero h1{font-size:clamp(34px,5vw,58px);line-height:1.08;max-width:800px;margin:0 0 18px}
+.hero p{font-size:18px;line-height:1.6;max-width:730px;color:#e0eaff}
+.course-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.public-nav button{margin:0}
 @media(max-width:800px){
  .sidebar{position:static;width:100%;height:auto}
  .app{display:block}
  .main{margin-left:0;width:100%}
+ .public-nav{align-items:flex-start;flex-direction:column}.hero{padding:36px 24px}
 }
 </style>
 </head>
@@ -68,6 +77,7 @@ let quizQuestions=[];
 let historyStack=[];
 let pythonExercises=[];
 let pythonIndex=0;
+let adminMfaSetupToken='';
 
 function $(s){return document.querySelector(s)}
 function esc(v){
@@ -128,7 +138,7 @@ async function start(){
   const token=localStorage.getItem('token');
 
   if(!token){
-    loginPage();
+    publicHome();
     return;
   }
 
@@ -145,17 +155,21 @@ function loginPage(){
   $('#app').innerHTML=`
     <div class="login-wrap">
       <div class="login-box">
-        <h1>Swaya</h1>
+        <button class="secondary" onclick="publicHome()">&#8592; Home</button>
+        <h1 style="margin-top:22px">Sign in to Swaya</h1>
         <p class="muted">Your self-directed learning platform</p>
 
         <form onsubmit="login(event)">
           <label>Email</label>
-          <input id="loginEmail" type="email" value="learner@example.com" required>
+          <input id="loginEmail" type="email" autocomplete="username" required>
 
           <label>Password</label>
-          <input id="loginPassword" type="password" value="LearnTest@2026" required>
+          <input id="loginPassword" type="password" autocomplete="current-password" required>
 
-          <button style="width:100%">Login</button>
+          <label id="mfaCodeLabel" class="hidden">Authenticator code</label>
+          <input id="mfaCode" class="hidden" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="6-digit code">
+
+          <button style="width:100%">Sign in</button>
         </form>
 
         <div id="loginMsg" style="margin-top:15px"></div>
@@ -169,13 +183,102 @@ function loginPage(){
     </div>`;
 }
 
+async function publicHome(){
+  pushPage(publicHome);
+  let courses=[];
+  try{courses=await api('/public/courses');}catch(e){}
+  $('#app').innerHTML=`
+    <nav class="public-nav"><strong>Swaya</strong><div class="nav-row">
+      <button class="secondary" onclick="publicHome()">Home</button>
+      <button class="secondary" onclick="aboutPage()">About</button>
+      <button class="secondary" onclick="requestPage()">Contribute or request access</button>
+      <button onclick="loginPage()">Learner / Admin sign in</button>
+    </div></nav>
+    <main class="public-wrap">
+      <section class="hero"><span class="pill">Learn at your pace. Shape your path.</span>
+        <h1>Learning pathways for what you want to become.</h1>
+        <p>Swaya helps learners build practical skills through clear, day-wise courses, hands-on practice, and steady progress.</p>
+        <button onclick="requestPage('learner_access')">Request learner access</button>
+        <button class="secondary" onclick="requestPage('contributor')">Become a contributor</button>
+      </section>
+      <section><h2>Published courses</h2><p class="muted">Explore the learning paths currently available on Swaya.</p>
+        ${courses.length?`<div class="course-grid">${courses.map(c=>`<article class="card"><span class="pill">${esc(c.course_code||'Learning path')}</span><h3>${esc(c.title)}</h3><p>${esc(c.description||'A structured learning path with practical lessons.')}</p><p class="muted">${esc(c.lesson_count)} day-wise lessons</p><button onclick="requestPage('learner_access',${c.id})">Request access</button></article>`).join('')}</div>`:'<div class="card"><p>Published course information will appear here.</p></div>'}
+      </section>
+      <section class="card" style="margin-top:28px"><h2>Build learning with us</h2><p>We welcome contributors, subject experts, and content developers who want to make practical learning more accessible.</p><button onclick="requestPage('contributor')">Share your interest</button> <button class="secondary" onclick="requestPage('content_developer')">Create learning content</button></section>
+    </main>`;
+}
+
+function aboutPage(){
+  pushPage(aboutPage);
+  $('#app').innerHTML=`<nav class="public-nav"><strong>Swaya</strong><div class="nav-row"><button class="secondary" onclick="publicHome()">Home</button><button onclick="loginPage()">Sign in</button></div></nav>
+    <main class="public-wrap"><div class="nav-row"><button class="secondary" onclick="publicHome()">&#8592; Home</button></div>
+    <section class="hero"><h1>Learning should move you toward the future you choose.</h1><p>Swaya is a self-directed learning platform built to help people grow practical skills through approachable, structured learning.</p></section>
+    <div class="card"><h2>Our purpose</h2><p>We make learning pathways easier to follow and easier to create. Learners can move through day-wise lessons, practice what they learn, and track progress at their own pace.</p><p>Swaya also invites educators, contributors, and content developers to share their knowledge and build useful resources with the learning community.</p><button onclick="requestPage('contributor')">Get involved</button></div></main>`;
+}
+
+async function requestPage(requestType='contributor',courseId=null){
+  pushPage(()=>requestPage(requestType,courseId));
+  let courses=[];
+  try{courses=await api('/public/courses');}catch(e){}
+  const options=courses.map(c=>`<option value="${c.id}" ${Number(courseId)===Number(c.id)?'selected':''}>${esc(c.title)}</option>`).join('');
+  $('#app').innerHTML=`<nav class="public-nav"><strong>Swaya</strong><div class="nav-row"><button class="secondary" onclick="publicHome()">Home</button><button onclick="loginPage()">Sign in</button></div></nav>
+    <main class="public-wrap"><div class="nav-row"><button class="secondary" onclick="publicHome()">&#8592; Home</button></div>
+    <section class="card" style="max-width:760px;margin:20px auto"><h1>Connect with Swaya</h1><p class="muted">Tell us how you would like to take part. Your request will be sent to the Swaya administrator.</p>
+      <form onsubmit="submitPublicRequest(event)">
+        <label>Your name</label><input id="publicRequestName" required minlength="2" maxlength="120" autocomplete="name">
+        <label>Email address</label><input id="publicRequestEmail" type="email" required autocomplete="email">
+        <label>I am interested in</label><select id="publicRequestType" onchange="toggleRequestCourse()">
+          <option value="contributor" ${requestType==='contributor'?'selected':''}>Contributing to Swaya</option>
+          <option value="content_developer" ${requestType==='content_developer'?'selected':''}>Developing learning content</option>
+          <option value="learner_access" ${requestType==='learner_access'?'selected':''}>Learner access to a course or resource</option>
+        </select>
+        <div id="requestCourseWrap"><label>Course or resource</label><select id="publicRequestCourse"><option value="">Not sure yet</option>${options}</select></div>
+        <label>What would you like us to know?</label><textarea id="publicRequestMessage" rows="5" maxlength="3000" placeholder="Share your interest or describe the access you need."></textarea>
+        <button>Send request</button><div id="publicRequestMsg" style="margin-top:12px" aria-live="polite"></div>
+      </form>
+    </section></main>`;
+  toggleRequestCourse();
+}
+
+function toggleRequestCourse(){
+  const wrap=$('#requestCourseWrap');
+  if(wrap)wrap.classList.toggle('hidden',$('#publicRequestType').value!=='learner_access');
+}
+
+async function submitPublicRequest(event){
+  event.preventDefault();
+  const msg=$('#publicRequestMsg');msg.className='muted';msg.textContent='Sending…';
+  try{
+    const data=await api('/public/requests',{method:'POST',body:JSON.stringify({name:$('#publicRequestName').value,email:$('#publicRequestEmail').value,request_type:$('#publicRequestType').value,course_id:$('#publicRequestType').value==='learner_access'&&$('#publicRequestCourse').value?Number($('#publicRequestCourse').value):null,message:$('#publicRequestMessage').value})});
+    msg.className=data.email_sent?'success':'warning';msg.textContent=data.message;
+  }catch(e){msg.className='error';msg.textContent=e.message;}
+}
+
+async function adminMfaSetupPage(setupToken){
+  adminMfaSetupToken=setupToken;
+  try{
+    const r=await fetch(API+'/auth/mfa/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({setup_token:setupToken})});
+    const data=await r.json();if(!r.ok)throw new Error(data.detail||'Could not start authenticator setup.');
+    $('#app').innerHTML=`<div class="login-wrap"><section class="login-box"><h1>Secure your administrator account</h1><p>Scan this code with Google Authenticator, Microsoft Authenticator, or another TOTP authenticator app. If you cannot scan it, enter the setup key manually:</p><p style="text-align:center"><img src="${data.qr_data_uri}" alt="Authenticator setup QR code" width="190" height="190"></p><p class="card"><strong style="font-size:22px;letter-spacing:2px;word-break:break-all">${esc(data.secret)}</strong></p><p class="muted">Enter the six-digit code shown by your authenticator to finish setup. Keep the setup key private.</p><form onsubmit="enableAdminMfa(event)"><label>Authenticator code</label><input id="setupMfaCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required><button>Enable two-factor sign-in</button></form><div id="setupMfaMsg"></div></section></div>`;
+  }catch(e){loginPage();$('#loginMsg').innerHTML='<p class="error">'+esc(e.message)+'</p>';}
+}
+
+async function enableAdminMfa(event){
+  event.preventDefault();const msg=$('#setupMfaMsg');msg.textContent='Verifying…';
+  try{
+    const r=await fetch(API+'/auth/mfa/enable',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({setup_token:adminMfaSetupToken,code:$('#setupMfaCode').value})});
+    const data=await r.json();if(!r.ok)throw new Error(data.detail||'Could not verify the authenticator code.');
+    localStorage.setItem('token',data.access_token);currentUser=data.user;historyStack=[];dashboard();
+  }catch(e){msg.className='error';msg.textContent=e.message;}
+}
+
 async function login(e){
   e.preventDefault();
 
   $('#loginMsg').textContent='Signing in...';
 
   try{
-    const body=JSON.stringify({email:document.querySelector("#loginEmail").value,password:document.querySelector("#loginPassword").value});
+    const body=JSON.stringify({email:document.querySelector("#loginEmail").value,password:document.querySelector("#loginPassword").value,mfa_code:$('#mfaCode').value||null});
 
 
 
@@ -187,7 +290,19 @@ async function login(e){
 
     const data=await r.json();
 
-    if(!r.ok) throw new Error(data.detail||'Login failed');
+    if(!r.ok){
+      if(data.detail==='Authenticator code required'){
+        $('#mfaCodeLabel').classList.remove('hidden');
+        $('#mfaCode').classList.remove('hidden');
+        $('#mfaCode').focus();
+      }
+      throw new Error(data.detail||'Login failed');
+    }
+
+    if(data.mfa_setup_required){
+      await adminMfaSetupPage(data.setup_token);
+      return;
+    }
 
     localStorage.setItem('token',data.access_token);
     currentUser=await api('/me');
@@ -206,8 +321,10 @@ function registerPage(){
         <h1>Create Account</h1>
 
         <form onsubmit="register(event)">
+          <label>Name</label>
+          <input id="regName" autocomplete="name" required minlength="2" maxlength="120">
           <label>Email</label>
-          <input id="regEmail" type="email" required>
+          <input id="regEmail" type="email" autocomplete="email" required>
 
           <label>Password</label>
           <input id="regPassword" type="password" required>
@@ -216,6 +333,7 @@ function registerPage(){
         </form>
 
         <div id="regMsg"></div>
+        <p><button class="secondary" onclick="publicHome()">Explore Swaya</button></p>
       </div>
     </div>`;
 }
@@ -227,6 +345,7 @@ async function register(e){
     await api('/auth/register',{
       method:'POST',
       body:JSON.stringify({
+        name:$('#regName').value,
         email:$('#regEmail').value,
         password:$('#regPassword').value
       })
@@ -250,7 +369,9 @@ function shell(content){
         <h2 style="font-size:18px;line-height:1.2">Learning Pathway<br>to become what you want to be</h2>
         <p style="color:#98a2b3">${esc(currentUser?.email||'')}</p>
 
+        <button onclick="publicHome()">&#127760; Public Home</button>
         <button onclick="dashboard()">&#127968; Dashboard</button>
+        <button onclick="aboutPage()">&#8505; About Swaya</button>
         <button onclick="course()">&#128218; Course</button>
         <button onclick="gamification()">&#128202; Progress</button>
         <button onclick="leaderboard()">&#127942; Leaderboard</button>
@@ -273,6 +394,7 @@ function shell(content){
         ${role==='admin'
           ? `<hr>
              <button onclick="adminUsers()">&#128100; Users</button>
+             <button onclick="adminRequests()">&#9993; Public Requests</button>
              <button onclick="auditLogs()">&#128196; Audit Logs</button>`
           : ''}
 
@@ -2607,6 +2729,22 @@ async function auditLogs(){
   }catch(e){
     shell(`<h1>Audit Logs</h1><div class="card"><p class="error">${esc(e.message)}</p></div>`);
   }
+}
+
+async function adminRequests(){
+  pushPage(adminRequests);
+  try{
+    const requests=await api('/admin/public-requests');
+    shell(`<div class="nav-row">${backButton()}</div><h1>Public Requests</h1>
+      <div class="card" style="overflow:auto"><table><tr><th>Received</th><th>Request</th><th>Contact</th><th>Course/resource</th><th>Message</th><th>Status</th></tr>
+      ${(requests||[]).map(x=>`<tr><td>${esc(new Date(x.created_at).toLocaleString())}</td><td>${esc(x.request_type.replaceAll('_',' '))}</td><td>${esc(x.name)}<br><a href="mailto:${encodeURIComponent(x.email)}">${esc(x.email)}</a></td><td>${esc(x.course||'—')}</td><td style="white-space:pre-wrap;min-width:220px">${esc(x.message||'—')}</td><td><select aria-label="Request status" onchange="setPublicRequestStatus(${x.id},this.value)">${['new','reviewed','approved','declined'].map(s=>`<option value="${s}" ${x.status===s?'selected':''}>${s}</option>`).join('')}</select></td></tr>`).join('')||'<tr><td colspan="6">No requests have arrived yet.</td></tr>'}
+      </table></div>`);
+  }catch(e){shell(`<div class="card"><h1>Public Requests</h1><p class="error">${esc(e.message)}</p></div>`);}
+}
+
+async function setPublicRequestStatus(id,status){
+  try{await api('/admin/public-requests/'+id,{method:'PATCH',body:JSON.stringify({status})});}
+  catch(e){alert(e.message);adminRequests();}
 }
 
 start();

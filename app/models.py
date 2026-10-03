@@ -209,4 +209,15 @@ class AuditLog(Base):
     ip_address: Mapped[str]=mapped_column(String(64),default='')
     created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),default=utcnow)
 
+class PublicRequest(Base):
+    __tablename__='public_requests'
+    id: Mapped[int]=mapped_column(primary_key=True)
+    name: Mapped[str]=mapped_column(String(120))
+    email: Mapped[str]=mapped_column(String(255),index=True)
+    request_type: Mapped[str]=mapped_column(String(40),index=True)
+    course_id: Mapped[int|None]=mapped_column(ForeignKey('courses.id'),nullable=True)
+    message: Mapped[str]=mapped_column(Text,default='')
+    status: Mapped[str]=mapped_column(String(20),default='new',index=True)
+    created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),default=utcnow)
+
 
