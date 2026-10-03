@@ -1023,7 +1023,13 @@ async def upload_lesson_media(lesson_id:int,file:UploadFile=File(...),title:str=
 
 @app.get('/api/admin/questions')
 def admin_questions(user=Depends(require_roles('admin','instructor','content_moderator','assessor')),db:Session=Depends(get_db)):
-    qs=db.scalars(select(Question).order_by(desc(Question.id)).limit(500)).all(); return [{'id':q.id,'lesson_id':q.lesson_id,'question':q.question,'difficulty':q.difficulty,'topic':q.topic,'tags':json.loads(q.tags_json),'active':q.active} for q in qs]
+    rows=db.execute(select(Question,Lesson,Course).join(Lesson,Lesson.id==Question.lesson_id).join(Course,Course.id==Lesson.course_id).order_by(Course.id,Lesson.day_number,Question.id.desc()).limit(2000)).all()
+    return [{'id':q.id,'course_id':c.id,'course_code':c.course_code,'course_title':c.title,'lesson_id':l.id,'lesson_code':l.lesson_code,'day_number':l.day_number,'lesson_title':l.title,'question':q.question,'options':json.loads(q.options_json),'correct_index':q.correct_index,'explanation':q.explanation,'resource_url':q.resource_url,'difficulty':q.difficulty,'topic':q.topic,'tags':json.loads(q.tags_json),'active':q.active} for q,l,c in rows]
+
+@app.get('/api/admin/question-targets')
+def admin_question_targets(user=Depends(require_roles('admin','instructor','content_moderator','assessor')),db:Session=Depends(get_db)):
+    rows=db.execute(select(Course,Lesson).join(Lesson,Lesson.course_id==Course.id).order_by(Course.id,Lesson.day_number)).all()
+    return [{'course_id':c.id,'course_code':c.course_code,'course_title':c.title,'course_status':c.status,'lesson_id':l.id,'lesson_code':l.lesson_code,'day_number':l.day_number,'lesson_title':l.title} for c,l in rows]
 
 @app.post('/api/admin/questions')
 def create_question(x:QuestionIn,user=Depends(require_roles('admin','instructor','content_moderator')),db:Session=Depends(get_db)):
@@ -1035,6 +1041,114 @@ def update_question(question_id:int,x:QuestionIn,user=Depends(require_roles('adm
     if not q: raise HTTPException(404,'Question not found')
     for k,v in x.model_dump().items(): setattr(q,k,json.dumps(v) if k in ('options','tags') else v)
     db.commit(); return {'ok':True}
+
+@app.delete('/api/admin/questions/{question_id}')
+def delete_question(question_id:int,user=Depends(require_roles('admin','instructor','content_moderator')),db:Session=Depends(get_db)):
+    q=db.get(Question,question_id)
+    if not q: raise HTTPException(404,'Question not found')
+    db.delete(q); db.commit(); return {'ok':True}
+
+@app.get('/api/admin/questions/template.xlsx')
+def question_template(user=Depends(require_roles('admin','instructor','content_moderator'))):
+    from openpyxl import Workbook
+    from io import BytesIO
+    workbook=Workbook(); sheet=workbook.active; sheet.title='Questions'
+    sheet.append(['course_code','lesson_code','day_number','question','option_a','option_b','option_c','option_d','correct_answer','explanation','resource_url','difficulty','topic','tags','active'])
+    sheet.append(['3DDE','','1','Which format can identify a lesson?','Course code + day','Course title only','Email address','Question ID','A','Use course_code and either lesson_code or day_number.','','medium','Sample','template;example','true'])
+    buffer=BytesIO(); workbook.save(buffer); workbook.close(); buffer.seek(0)
+    return StreamingResponse(buffer,media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',headers={'Content-Disposition':'attachment; filename="swaya-question-bank-template.xlsx"'})
+
+@app.post('/api/admin/questions/bulk')
+async def bulk_create_questions(file:UploadFile=File(...),user=Depends(require_roles('admin','instructor','content_moderator')),db:Session=Depends(get_db)):
+    extension=Path(file.filename or '').suffix.lower()
+    if extension not in {'.csv','.txt','.xlsx'}:
+        raise HTTPException(400,'Upload an .xlsx Excel workbook, .csv file, or tab-separated .txt template.')
+    raw=await file.read(2*1024*1024+1); await file.close()
+    if len(raw)>2*1024*1024: raise HTTPException(413,'Question file is too large (maximum 2 MB).')
+    try:
+        if extension=='.xlsx':
+            from openpyxl import load_workbook
+            from io import BytesIO
+            workbook=load_workbook(BytesIO(raw),read_only=True,data_only=True)
+            sheet=workbook.active
+            iterator=sheet.iter_rows(values_only=True)
+            headers=next(iterator,None)
+            data_rows=[]
+            for row in iterator:
+                data_rows.append(row)
+                if len(data_rows)>1000: break
+            workbook.close()
+            records=[dict(zip([str(v if v is not None else '').strip() for v in (headers or [])],row)) for row in data_rows]
+        else:
+            decoded=raw.decode('utf-8-sig')
+            delimiter='\t' if extension=='.txt' else ','
+            reader=csv.DictReader(io.StringIO(decoded),delimiter=delimiter)
+            records=[]
+            for row in reader:
+                records.append(row)
+                if len(records)>1000: break
+    except Exception as exc:
+        raise HTTPException(400,'Could not read this file. Use the downloaded template and save it as .xlsx, UTF-8 .csv, or tab-separated .txt.') from exc
+    if len(records)>1000: raise HTTPException(400,'A bulk upload can contain at most 1,000 questions.')
+    if not records: raise HTTPException(400,'The file contains no question rows.')
+    courses={c.course_code.strip().casefold():c for c in db.scalars(select(Course)).all()}
+    lesson_rows=db.execute(select(Lesson,Course).join(Course,Course.id==Lesson.course_id)).all()
+    by_day={(c.course_code.strip().casefold(),l.day_number):(l,c) for l,c in lesson_rows}
+    by_code={(c.course_code.strip().casefold(),(l.lesson_code or '').strip().casefold()):(l,c) for l,c in lesson_rows if l.lesson_code}
+    headers={'course_code','question','option_a','option_b','option_c','option_d','correct_answer'}
+    normalized=[]; issues=[]; seen=set()
+    for line,row in enumerate(records,start=2):
+        row={str(k or '').strip().lower().replace(' ','_'):(str(v).strip() if v is not None else '') for k,v in row.items() if k is not None}
+        if not any(row.values()): continue
+        missing=sorted(key for key in headers if not row.get(key))
+        if missing:
+            issues.append(f'Row {line}: required columns need values: {", ".join(missing)}.'); continue
+        course_key=row['course_code'].casefold()
+        if course_key not in courses:
+            issues.append(f"Row {line}: course_code '{row['course_code']}' does not match a course."); continue
+        lesson_key=row.get('lesson_code','').casefold()
+        try: day_number=int(row['day_number']) if row.get('day_number') else None
+        except ValueError: day_number=None
+        target=by_code.get((course_key,lesson_key)) if lesson_key else None
+        if not target and day_number is not None: target=by_day.get((course_key,day_number))
+        if target is None:
+            issues.append(f"Row {line}: lesson was not found for course {row['course_code']}; provide its lesson_code or day_number."); continue
+        lesson,course=target
+        options=[row[f'option_{letter}'] for letter in 'abcd']
+        if len(row['question'])>5000 or any(len(option)>2000 for option in options):
+            issues.append(f'Row {line}: questions must be 5,000 characters or fewer and answer options 2,000 characters or fewer.'); continue
+        answer=row['correct_answer'].strip()
+        answer_fold=answer.casefold()
+        if answer_fold in {'a','b','c','d'}: correct_index=ord(answer_fold)-ord('a')
+        elif answer in {'1','2','3','4'}: correct_index=int(answer)-1
+        else:
+            matches=[i for i,value in enumerate(options) if value.casefold()==answer_fold]
+            correct_index=matches[0] if len(matches)==1 else -1
+        if correct_index<0:
+            issues.append(f'Row {line}: correct_answer must be A-D, 1-4, or exactly match one answer option.'); continue
+        difficulty=(row.get('difficulty') or 'medium').lower()
+        if difficulty not in {'beginner','easy','medium','hard','advanced'}:
+            issues.append(f'Row {line}: difficulty must be beginner, easy, medium, hard, or advanced.'); continue
+        active_value=(row.get('active') or 'true').lower()
+        if active_value not in {'true','false','yes','no','1','0','active','inactive'}:
+            issues.append(f'Row {line}: active must be true/false, yes/no, or 1/0.'); continue
+        question=row['question'].strip(); fingerprint=(lesson.id,question.casefold())
+        if fingerprint in seen:
+            issues.append(f'Row {line}: this question is repeated in the upload.'); continue
+        seen.add(fingerprint)
+        tags=[tag.strip() for tag in row.get('tags','').replace(',', ';').split(';') if tag.strip()]
+        normalized.append(Question(lesson_id=lesson.id,question=question,options_json=json.dumps(options),correct_index=correct_index,explanation=row.get('explanation',''),resource_url=row.get('resource_url',''),difficulty=difficulty,topic=row.get('topic','')[:100],tags_json=json.dumps(tags),active=active_value in {'true','yes','1','active'}))
+        if len(issues)>=50: break
+    if len(normalized)+len(issues)==0: issues.append('The file contains no question rows.')
+    if issues: raise HTTPException(400,{'message':'No questions were imported. Fix the listed rows and upload again.','errors':issues[:50]})
+    existing={(lesson_id,question.casefold()) for lesson_id,question in db.execute(select(Question.lesson_id,Question.question)).all()}
+    duplicates=[f"Question '{q.question[:80]}' already exists in its lesson." for q in normalized if (q.lesson_id,q.question.casefold()) in existing]
+    if duplicates: raise HTTPException(409,{'message':'No questions were imported because duplicates already exist.','errors':duplicates[:50]})
+    try:
+        db.add_all(normalized); db.commit()
+    except Exception:
+        db.rollback(); raise
+    return {'ok':True,'created':len(normalized),'message':f'Imported {len(normalized)} questions across their selected courses and lessons.'}
 
 @app.get('/api/instructor/submissions')
 def submissions(user=Depends(require_roles('admin','instructor','assessor')),db:Session=Depends(get_db)):

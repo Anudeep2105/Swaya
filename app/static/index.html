@@ -83,6 +83,8 @@ let historyStack=[];
 let pythonExercises=[];
 let pythonIndex=0;
 let adminMfaSetupToken='';
+let questionBankItems=[];
+let questionTargets=[];
 
 function $(s){return document.querySelector(s)}
 function esc(v){
@@ -2279,7 +2281,14 @@ async function questions(){
   pushPage(questions);
 
   try{
-    const qs=await api('/admin/questions');
+    const [qs,targets]=await Promise.all([api('/admin/questions'),api('/admin/question-targets')]);
+    questionBankItems=qs||[];questionTargets=targets||[];
+    const groups=new Map();
+    questionBankItems.forEach(q=>{
+      const key=q.course_id+':'+q.lesson_id;
+      if(!groups.has(key))groups.set(key,{course_code:q.course_code,course_title:q.course_title,lesson_code:q.lesson_code,lesson_id:q.lesson_id,day_number:q.day_number,lesson_title:q.lesson_title,items:[]});
+      groups.get(key).items.push(q);
+    });
 
     shell(`
       <div class="nav-row">${backButton()}</div>
@@ -2290,35 +2299,34 @@ async function questions(){
       </div>
 
       <div class="card">
+        <h2>Bulk upload questions</h2>
+        <p>Import up to 1,000 questions in one upload. Each row identifies its course and lesson, so one file can cover several courses and lessons. All rows are checked before anything is saved.</p>
+        <div class="nav-row">
+          <button class="secondary" onclick="downloadQuestionTemplate('xlsx')">Download Excel template</button>
+          <button class="secondary" onclick="downloadQuestionTemplate('csv')">Download CSV template</button>
+          <button class="secondary" onclick="downloadQuestionTemplate('txt')">Download TXT template</button>
+        </div>
+        <p class="muted">Required columns: course_code, lesson_code or day_number, question, option_a, option_b, option_c, option_d, correct_answer. The answer may be A–D, 1–4, or the exact option text. Optional columns: explanation, resource_url, difficulty, topic, tags (semicolon-separated), active. TXT files use tabs between columns.</p>
+        <p class="muted">Course codes in your account: ${[...new Map(questionTargets.map(t=>[t.course_code,t.course_title])).entries()].map(([code,title])=>`<span class="pill">${esc(code)} — ${esc(title)}</span>`).join(' ')||'No lessons are available yet.'}</p>
+        <label for="questionBulkFile">Choose an Excel, CSV, or tab-separated TXT file (maximum 2 MB)</label>
+        <input id="questionBulkFile" type="file" accept=".xlsx,.csv,.txt">
+        <button onclick="bulkUploadQuestions()">Upload question bank</button>
+        <div id="questionBulkMessage" class="muted" style="margin-top:10px" aria-live="polite"></div>
+      </div>
+
+      <div class="card">
         <input id="questionSearch"
-               placeholder="&#128269; Search questions, topics or lessons..."
+               placeholder="&#128269; Search courses, lessons, questions or topics..."
                oninput="filterQuestions()">
       </div>
 
-      <div class="card" style="overflow:auto">
-        <table id="questionTable">
-          <tr>
-            <th>Lesson</th>
-            <th>Question</th>
-            <th>Difficulty</th>
-            <th>Topic</th>
-            <th>Status</th>
-            <th>Action</th>
-          </tr>
-
-          ${(qs||[]).map(q=>`
-            <tr data-search="${esc((q.question+' '+q.topic+' '+q.lesson_id).toLowerCase())}">
-              <td>Day ${esc(q.lesson_id)}</td>
-              <td>${esc(q.question)}</td>
-              <td>${esc(q.difficulty||'-')}</td>
-              <td>${esc(q.topic||'-')}</td>
-              <td>${q.active?'<span class="pill">Active</span>':'Inactive'}</td>
-              <td>
-                <button onclick="editQuestion(${q.id})">Edit</button>
-              </td>
-            </tr>`).join('')}
-        </table>
-      </div>
+      ${groups.size?[...groups.values()].map(g=>`
+        <details class="card question-group" open>
+          <summary><strong>${esc(g.course_code)} — ${esc(g.course_title)}</strong> · Day ${esc(g.day_number)} — ${esc(g.lesson_title)} <span class="muted">(${g.items.length} questions)</span></summary>
+          <div style="overflow:auto;margin-top:14px"><table class="questionTable"><tr><th>Question</th><th>Difficulty</th><th>Topic</th><th>Status</th><th>Action</th></tr>
+            ${g.items.map(q=>`<tr data-search="${esc((g.course_code+' '+g.course_title+' '+g.day_number+' '+g.lesson_title+' '+q.question+' '+q.topic).toLowerCase())}"><td>${esc(q.question)}</td><td>${esc(q.difficulty||'-')}</td><td>${esc(q.topic||'-')}</td><td>${q.active?'<span class="pill">Active</span>':'Inactive'}</td><td><button class="secondary" onclick="editQuestion(${q.id})">Edit</button> <button class="secondary" onclick="deleteQuestion(${q.id})">Delete</button></td></tr>`).join('')}
+          </table></div>
+        </details>`).join(''):'<div class="card"><p>No questions have been added yet. Add one or use the bulk upload templates above.</p></div>'}
     `);
   }catch(e){
     shell(`<h1>Question Bank</h1><div class="card"><p class="error">${esc(e.message)}</p></div>`);
@@ -2328,18 +2336,14 @@ async function questions(){
 function filterQuestions(){
   const s=($('#questionSearch')?.value||'').toLowerCase();
 
-  document.querySelectorAll('#questionTable tr[data-search]').forEach(row=>{
+  document.querySelectorAll('.questionTable tr[data-search]').forEach(row=>{
     row.style.display=row.dataset.search.includes(s)?'':'none';
   });
 }
 
 async function showQuestionForm(id=null){
-  let q=null;
-
-  if(id){
-    const all=await api('/admin/questions');
-    q=all.find(x=>Number(x.id)===Number(id));
-  }
+  const q=id?questionBankItems.find(x=>Number(x.id)===Number(id)):null;
+  if(!questionTargets.length)questionTargets=await api('/admin/question-targets');
 
   const opts=q?.options||[];
 
@@ -2350,9 +2354,11 @@ async function showQuestionForm(id=null){
 
     <div class="card">
 
-      <label>Lesson / Day ID</label>
-      <input id="q_lesson_id" type="number" min="1" max="30"
-             value="${esc(q?.lesson_id||1)}">
+      <label>Course and lesson</label>
+      <select id="q_lesson_id" required>
+        <option value="">Select course and lesson</option>
+        ${questionTargets.map(t=>`<option value="${t.lesson_id}" ${Number(q?.lesson_id)===Number(t.lesson_id)?'selected':''}>${esc(t.course_code)} — ${esc(t.course_title)} · Day ${esc(t.day_number)} — ${esc(t.lesson_title)}</option>`).join('')}
+      </select>
 
       <label>Question</label>
       <textarea id="q_question" rows="4">${esc(q?.question||'')}</textarea>
@@ -2507,6 +2513,32 @@ shell(`
 
 }catch(e){
 shell(`<h1>Users</h1><div class="card"><p class="error">${esc(e.message)}</p></div>`);
+}
+
+function downloadQuestionTemplate(format){
+  const headers=['course_code','lesson_code','day_number','question','option_a','option_b','option_c','option_d','correct_answer','explanation','resource_url','difficulty','topic','tags','active'];
+  if(format==='xlsx'){
+    fetch(API+'/admin/questions/template.xlsx',{headers:{Authorization:'Bearer '+localStorage.getItem('token')}}).then(async r=>{if(!r.ok)throw new Error('Unable to download Excel template.');const blob=await r.blob();const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download='swaya-question-bank-template.xlsx';link.click();URL.revokeObjectURL(link.href);}).catch(e=>alert(e.message));return;
+  }
+  const example=['3DDE','','1','Which format can identify a lesson?','Course code + day','Course title only','Email address','Question ID','A','Use course_code and either lesson_code or day_number.','','medium','Sample','template;example','true'];
+  const delimiter=format==='txt'?'\t':',';
+  const content=[headers,example].map(row=>row.map(v=>format==='txt'?v:'"'+String(v).replaceAll('"','""')+'"').join(delimiter)).join('\r\n');
+  const blob=new Blob(['\ufeff',content],{type:format==='txt'?'text/plain;charset=utf-8':'text/csv;charset=utf-8'});const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=`swaya-question-bank-template.${format}`;link.click();URL.revokeObjectURL(link.href);
+}
+
+async function bulkUploadQuestions(){
+  const input=$('#questionBulkFile'),message=$('#questionBulkMessage');
+  if(!input.files.length){message.className='error';message.textContent='Choose a question file first.';return;}
+  const form=new FormData();form.append('file',input.files[0]);message.className='muted';message.textContent='Checking and importing questions…';
+  try{const result=await api('/admin/questions/bulk',{method:'POST',body:form});input.value='';await questions();const fresh=$('#questionBulkMessage');fresh.className='success';fresh.textContent=result.message;}
+  catch(e){message.className='error';message.textContent=e.message;}
+}
+
+async function deleteQuestion(id){
+  const q=questionBankItems.find(x=>Number(x.id)===Number(id));
+  if(!q||!confirm('Permanently delete this question from '+q.course_code+' / Day '+q.day_number+'?'))return;
+  try{await api('/admin/questions/'+id,{method:'DELETE'});await questions();}
+  catch(e){alert(e.message);}
 }
 }
 
