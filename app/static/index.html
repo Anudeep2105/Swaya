@@ -60,6 +60,7 @@ code{font-family:Consolas,monospace}
 .course-choice span{display:block}
 .construction-notice{padding:13px 18px;background:#fffaeb;border:1px solid #fedf89;border-radius:10px;color:#93370d;margin:14px 0 22px}
 .sheet-wrap{overflow:auto;border:1px solid #d0d5dd;border-radius:10px;background:#fff}.sheet{border-collapse:separate;border-spacing:0;min-width:760px}.sheet th,.sheet td{padding:0;border-right:1px solid #eaecf0;border-bottom:1px solid #eaecf0}.sheet th{height:32px;text-align:center;color:#475467}.sheet .row-head{width:44px;min-width:44px;text-align:center;background:#f9fafb}.sheet-cell{width:100%;min-width:96px;height:36px;border:0!important;border-radius:0!important;margin:0!important;padding:7px 9px!important;background:transparent}.sheet-cell:focus{outline:2px solid #2563eb;outline-offset:-2px;position:relative}.sheet-toolbar{display:grid;grid-template-columns:70px 1fr;gap:8px;align-items:center;margin:12px 0}.sheet-toolbar input{margin:0;font-family:Consolas,monospace}
+.sql-editor{min-height:145px;font:15px/1.5 Consolas,monospace;background:#101828;color:#f8fafc}.sql-result{overflow:auto}.sql-result table{min-width:420px}.sql-result th,.sql-result td{white-space:nowrap}
 @media(max-width:800px){
  .sidebar{position:static;width:100%;height:auto}
  .app{display:block}
@@ -440,6 +441,7 @@ function shell(content){
         <button onclick="feedbackPage()">&#128172; Feedback</button>
         <button onclick="course()">&#128218; Course</button>
         <button onclick="spreadsheetLab()">&#128202; Spreadsheet Practice</button>
+        <button onclick="sqlLab()">&#128221; SQL Practice</button>
         <button onclick="gamification()">&#128202; Progress</button>
         <button onclick="leaderboard()">&#127942; Leaderboard</button>
         <button onclick="certificate()">&#127941; Certificate</button>
@@ -766,6 +768,7 @@ async function lesson(id){
         <div class="nav-row">
         <button onclick="pythonLab(${id})">&#128187; Python Practice Lab</button>
         <button class="secondary" onclick="spreadsheetLab()">&#128202; Spreadsheet Practice</button>
+        <button class="secondary" onclick="sqlLab()">&#128221; SQL Practice</button>
           <button onclick="takeQuiz(${id})">&#128202; Take Assessment</button>
         </div>
 
@@ -1108,6 +1111,51 @@ function spreadsheetFormulaKey(event){if(event.key==='Enter'){event.preventDefau
 function pasteSpreadsheet(event,address){const text=event.clipboardData?.getData('text');if(!text||!text.includes('\t'))return;event.preventDefault();const start=address.match(/^([A-Z]+)(\d+)$/);const startCol=[...start[1]].reduce((n,c)=>n*26+c.charCodeAt(0)-64,0)-1,startRow=Number(start[2])-1;text.split(/\r?\n/).filter((line,i,all)=>line||i<all.length-1).forEach((line,r)=>line.split('\t').forEach((value,c)=>{const col=startCol+c,row=startRow+r;if(row<spreadsheetRows&&col<spreadsheetCols)spreadsheetCells[spreadsheetAddress(row,col)]=value}));renderSpreadsheetLab('Pasted spreadsheet cells.');}
 function checkSpreadsheetWork(){const expected={'D2':250,'D3':720,'D4':300,'D5':480,'D6':1750};const misses=Object.entries(expected).filter(([cell,value])=>Number(spreadsheetDisplay(cell))!==value);const box=$('#sheetFeedback');if(box)box.innerHTML=misses.length?`<span class="warning">Keep going: check ${misses.map(([cell])=>cell).join(', ')}. Use <code>=B2*C2</code> for each product row and <code>=SUM(D2:D5)</code> in D6.</span>`:'<span class="success">Great work! Your product revenues and total are correct.</span>';}
 function resetSpreadsheet(){spreadsheetCells={...spreadsheetStarter};spreadsheetActive='A1';renderSpreadsheetLab('Sheet reset. Try entering formulas in D2 through D6.')}
+
+const sqlSalesRows=[{product:'Notebook',units:25,price_each:10},{product:'Pen set',units:18,price_each:40},{product:'Folder',units:30,price_each:10},{product:'Planner',units:12,price_each:40}];
+const sqlChallenges=[
+  {title:'Explore the table',prompt:'Show every column and row from the sales table.',query:'SELECT * FROM sales;'},
+  {title:'Filter rows',prompt:'Show products with more than 15 units sold. Return the product and units columns.',query:'SELECT product, units FROM sales WHERE units > 15;'},
+  {title:'Calculate and sort',prompt:'Calculate revenue for each product, name the result revenue, and sort from highest to lowest.',query:'SELECT product, units * price_each AS revenue FROM sales ORDER BY revenue DESC;'},
+  {title:'Summarize sales',prompt:'Find the total number of units and average price for all products.',query:'SELECT SUM(units) AS total_units, AVG(price_each) AS average_price FROM sales;'}
+];
+let sqlChallengeIndex=0,sqlQuery=sqlChallenges[0].query,sqlResult=null,sqlMessage='';
+function sqlLab(){pushPage(sqlLab);renderSqlLab()}
+function renderSqlLab(){
+  const challenge=sqlChallenges[sqlChallengeIndex];
+  const columns=['product','units','price_each'];
+  shell(`<div class="nav-row">${backButton()}</div><h1>&#128221; SQL Practice</h1><p class="muted">Write SELECT queries against a safe sample table. Results appear below; query changes do not affect course or learner records.</p>
+    <div class="card"><span class="pill">Challenge ${sqlChallengeIndex+1} of ${sqlChallenges.length}</span><h2>${esc(challenge.title)}</h2><p>${esc(challenge.prompt)}</p>
+    <label for="sqlQuery">Your SQL query</label><textarea id="sqlQuery" class="sql-editor" spellcheck="false">${esc(sqlQuery)}</textarea>
+    <div class="nav-row"><button onclick="runSqlQuery()">&#9654; Run query</button><button class="secondary" onclick="loadSqlChallenge(${sqlChallengeIndex})">Show example query</button></div>
+    <div class="nav-row">${sqlChallenges.map((item,i)=>`<button class="${i===sqlChallengeIndex?'':'secondary'}" onclick="selectSqlChallenge(${i})">${i+1}. ${esc(item.title)}</button>`).join('')}</div>
+    <p class="muted">Supported: SELECT columns or *, WHERE with AND and comparison operators, ORDER BY, LIMIT, simple arithmetic, and COUNT, SUM, AVG, MIN, MAX. The practice runner is read-only.</p>
+    <div id="sqlFeedback" class="${sqlMessage.startsWith('Error')?'error':'success'}">${esc(sqlMessage)}</div>
+    <div class="sql-result" id="sqlResults">${renderSqlResults()}</div></div>
+    <div class="card"><h2>sales table</h2><p class="muted">Sample spreadsheet data available to query</p><div class="sql-result"><table><thead><tr>${columns.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${sqlSalesRows.map(row=>`<tr>${columns.map(c=>`<td>${esc(row[c])}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`);
+}
+function renderSqlResults(){if(!sqlResult)return '';if(sqlResult.error)return `<p class="error">${esc(sqlResult.error)}</p>`;if(!sqlResult.columns.length)return '<p class="muted">Query ran successfully. No rows returned.</p>';return `<p class="success">${sqlResult.rows.length} row${sqlResult.rows.length===1?'':'s'} returned.</p><table><thead><tr>${sqlResult.columns.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${sqlResult.rows.map(row=>`<tr>${sqlResult.columns.map(c=>`<td>${esc(row[c]??'')}</td>`).join('')}</tr>`).join('')}</tbody></table>`}
+function runSqlQuery(){sqlQuery=$('#sqlQuery')?.value||'';try{sqlResult=executePracticeSql(sqlQuery);sqlMessage='Query ran successfully.'}catch(e){sqlResult={error:e.message,columns:[],rows:[]};sqlMessage='Error: '+e.message}renderSqlLab()}
+function selectSqlChallenge(index){sqlQuery=sqlChallenges[index].query;sqlChallengeIndex=index;sqlResult=null;sqlMessage='';renderSqlLab()}
+function loadSqlChallenge(index){sqlQuery=sqlChallenges[index].query;sqlMessage='Example query loaded. Run it to see the result.';renderSqlLab()}
+function executePracticeSql(query){
+  const source=String(query||'').trim().replace(/;\s*$/,'');
+  const match=source.match(/^SELECT\s+([\s\S]+?)\s+FROM\s+([a-z_]\w*)([\s\S]*)$/i);
+  if(!match)throw Error('Use SELECT … FROM sales to start a query.');
+  if(match[2].toLowerCase()!=='sales')throw Error('The available sample table is sales.');
+  let selectText=match[1].trim(),rest=match[3].trim(),limit=null,orderText='',whereText='';
+  let found=rest.match(/(?:^|\s+)LIMIT\s+(\d+)\s*$/i);if(found){limit=Math.min(Number(found[1]),100);rest=rest.slice(0,found.index).trim()}
+  found=rest.match(/(?:^|\s+)ORDER\s+BY\s+([\s\S]+)$/i);if(found){orderText=found[1].trim();rest=rest.slice(0,found.index).trim()}
+  found=rest.match(/^WHERE\s+([\s\S]+)$/i);if(found)whereText=found[1].trim();else if(rest)throw Error('Check the WHERE, ORDER BY, or LIMIT clause.');
+  const validColumns=['product','units','price_each'];
+  const rows=sqlSalesRows.filter(row=>{if(!whereText)return true;return whereText.split(/\s+AND\s+/i).every(part=>{const m=part.match(/^([a-z_]\w*)\s*(=|!=|<>|>=|<=|>|<)\s*(?:'([^']*)'|"([^"]*)"|(-?\d+(?:\.\d+)?))$/);if(!m||!validColumns.includes(m[1].toLowerCase()))throw Error('Use a column comparison such as units > 15 in WHERE.');const a=row[m[1].toLowerCase()],raw=m[3]??m[4]??m[5],b=typeof a==='number'?Number(raw):raw,op=m[2];return op==='='?a===b:op==='!='||op==='<>'?a!==b:op==='>'?a>b:op==='<'?a<b:op==='>='?a>=b:a<=b})});
+  const items=selectText==='*'?validColumns.map(name=>({name,calc:r=>r[name]})):selectText.split(',').map(item=>{const aliasMatch=item.trim().match(/^([\s\S]+?)\s+AS\s+([a-z_]\w*)$/i),expr=(aliasMatch?aliasMatch[1]:item).trim(),alias=aliasMatch?.[2];const aggregate=expr.match(/^(COUNT|SUM|AVG|MIN|MAX)\s*\(\s*(\*|[a-z_]\w*)\s*\)$/i);if(aggregate)return {name:alias||expr.toLowerCase().replace(/\s/g,''),aggregate:aggregate[1].toUpperCase(),column:aggregate[2].toLowerCase()};if(validColumns.includes(expr.toLowerCase()))return {name:alias||expr.toLowerCase(),calc:r=>r[expr.toLowerCase()]};const arithmetic=expr.match(/^([a-z_]\w*)\s*([+*/-])\s*([a-z_]\w*)$/i);if(arithmetic&&validColumns.includes(arithmetic[1].toLowerCase())&&validColumns.includes(arithmetic[3].toLowerCase()))return {name:alias||expr.replace(/\s/g,''),calc:r=>{const a=r[arithmetic[1].toLowerCase()],b=r[arithmetic[3].toLowerCase()];return arithmetic[2]==='+'?a+b:arithmetic[2]==='-'?a-b:arithmetic[2]==='*'?a*b:a/b}};throw Error('Select a known column, a simple calculation, or an aggregate function.')});
+  const aggregates=items.some(item=>item.aggregate);let resultRows;
+  if(aggregates){if(items.some(item=>!item.aggregate))throw Error('Use aggregates together or select regular columns separately.');const row={};items.forEach(item=>{const values=rows.map(r=>r[item.column]).filter(v=>typeof v==='number');row[item.name]=item.aggregate==='COUNT'?(item.column==='*'?rows.length:values.length):item.aggregate==='SUM'?values.reduce((a,b)=>a+b,0):item.aggregate==='AVG'?values.length?values.reduce((a,b)=>a+b,0)/values.length:0:item.aggregate==='MIN'?Math.min(...values):Math.max(...values)});resultRows=rows.length?[row]:[]}
+  else resultRows=rows.map(r=>Object.fromEntries(items.map(item=>[item.name,item.calc(r)])));
+  if(orderText){const order=orderText.match(/^([a-z_]\w*)(?:\s+(ASC|DESC))?$/i);if(!order)throw Error('Use ORDER BY column [ASC|DESC].');const key=order[1],actual=items.find(item=>item.name.toLowerCase()===key.toLowerCase())?.name||key.toLowerCase();if(!Object.hasOwn(resultRows[0]||{},actual))throw Error('ORDER BY column was not selected.');resultRows.sort((a,b)=>a[actual]<b[actual]?-1:a[actual]>b[actual]?1:0);if(order[2]?.toUpperCase()==='DESC')resultRows.reverse()}
+  if(limit!==null)resultRows=resultRows.slice(0,limit);return {columns:items.map(item=>item.name),rows:resultRows};
+}
 
 function resetPythonCode(){
   const x=pythonExercises[pythonIndex];
