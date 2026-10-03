@@ -220,4 +220,15 @@ class PublicRequest(Base):
     status: Mapped[str]=mapped_column(String(20),default='new',index=True)
     created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),default=utcnow)
 
+class FeedbackReport(Base):
+    __tablename__='feedback_reports'
+    id: Mapped[int]=mapped_column(primary_key=True)
+    name: Mapped[str]=mapped_column(String(120))
+    email: Mapped[str]=mapped_column(String(255),index=True)
+    message: Mapped[str]=mapped_column(Text)
+    screenshot_key: Mapped[str|None]=mapped_column(String(500),nullable=True)
+    screenshot_filename: Mapped[str|None]=mapped_column(String(255),nullable=True)
+    screenshot_type: Mapped[str|None]=mapped_column(String(100),nullable=True)
+    created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),default=utcnow)
+
 

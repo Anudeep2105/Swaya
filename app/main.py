@@ -612,6 +612,72 @@ def submit_public_request(request:Request,x:PublicRequestIn,db:Session=Depends(g
     audit(db,None,'public_request','request',entry.id,request); db.commit()
     return {'ok':True,'email_sent':email_sent,'message':'Your request has been received.' if email_sent else 'Your request has been saved. Email notification is temporarily unavailable; the Swaya administrator can still review it.'}
 
+@app.post('/api/public/feedback')
+@limiter.limit('5/minute')
+async def submit_feedback(request:Request,name:str=Form(...,min_length=2,max_length=120),email:str=Form(...,max_length=255),message:str=Form(...,min_length=5,max_length=3000),screenshot:UploadFile|None=File(None),db:Session=Depends(get_db)):
+    import re
+    name=name.strip(); email=email.strip().lower(); message=message.strip()
+    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+",email): raise HTTPException(400,'Enter a valid email address.')
+    if len(name)<2 or len(message)<5: raise HTTPException(400,'Add your name and a short description of the issue.')
+    allowed={'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp'}
+    stored_path=None; object_key=None; remote_uploaded=False; original=None; content_type=None
+    if screenshot:
+        original=(Path((screenshot.filename or 'screenshot').replace('\\','/')).name or 'screenshot')[:255]
+        extension=Path(original).suffix.lower(); content_type=allowed.get(extension)
+        if not content_type or screenshot.content_type not in {'image/png','image/jpeg','image/webp'}:
+            raise HTTPException(400,'Upload a PNG, JPG, or WEBP screenshot.')
+        stored_name=f'{uuid.uuid4().hex}{extension}'; object_key=f'feedback/{stored_name}'
+        feedback_dir=STORAGE/'feedback'; feedback_dir.mkdir(parents=True,exist_ok=True); stored_path=feedback_dir/stored_name
+        total=0
+        try:
+            with stored_path.open('wb') as output:
+                while True:
+                    chunk=await screenshot.read(256*1024)
+                    if not chunk: break
+                    total+=len(chunk)
+                    if total>5*1024*1024: raise HTTPException(413,'Screenshot must be 5 MB or smaller.')
+                    output.write(chunk)
+            if total==0: raise HTTPException(400,'The selected screenshot is empty.')
+            if cloud_storage_enabled():
+                upload_cloud_file(stored_path,object_key,content_type); remote_uploaded=True
+        except CloudStorageError as exc:
+            stored_path.unlink(missing_ok=True)
+            raise HTTPException(502,'Screenshot storage is unavailable. Please try again without the screenshot or retry later.') from exc
+        except Exception:
+            stored_path.unlink(missing_ok=True)
+            if remote_uploaded:
+                try: delete_cloud_file(object_key)
+                except CloudStorageError: pass
+            raise
+        finally:
+            await screenshot.close()
+    entry=FeedbackReport(name=name,email=email,message=message,screenshot_key=object_key,screenshot_filename=original,screenshot_type=content_type)
+    try:
+        db.add(entry); db.flush(); audit(db,None,'feedback_report','feedback',entry.id,request); db.commit()
+    except Exception:
+        db.rollback()
+        if stored_path: stored_path.unlink(missing_ok=True)
+        if remote_uploaded:
+            try: delete_cloud_file(object_key)
+            except CloudStorageError: pass
+        raise
+    if stored_path: stored_path.unlink(missing_ok=True)
+    return {'ok':True,'message':'Thank you. Your feedback has been sent to the Swaya team.'}
+
+@app.get('/api/admin/feedback')
+def admin_feedback(user=Depends(require_roles('admin')),db:Session=Depends(get_db)):
+    rows=db.scalars(select(FeedbackReport).order_by(desc(FeedbackReport.created_at)).limit(500)).all()
+    return [{'id':x.id,'name':x.name,'email':x.email,'message':x.message,'screenshot':bool(x.screenshot_key),'screenshot_filename':x.screenshot_filename,'created_at':x.created_at.isoformat()} for x in rows]
+
+@app.get('/api/admin/feedback/{feedback_id}/screenshot')
+def admin_feedback_screenshot(feedback_id:int,user=Depends(require_roles('admin')),db:Session=Depends(get_db)):
+    entry=db.get(FeedbackReport,feedback_id)
+    if not entry or not entry.screenshot_key: raise HTTPException(404,'Screenshot not found.')
+    if cloud_storage_enabled(): return cloud_file_response(entry.screenshot_key,entry.screenshot_type or 'application/octet-stream',entry.screenshot_filename or 'screenshot')
+    path=STORAGE/entry.screenshot_key
+    if not path.is_file(): raise HTTPException(404,'Screenshot file is unavailable.')
+    return FileResponse(path,media_type=entry.screenshot_type or 'application/octet-stream',filename=entry.screenshot_filename or 'screenshot')
+
 @app.get('/api/courses/{course_id}/media')
 def course_media(course_id:int,user=Depends(current_user),db:Session=Depends(get_db)):
     course=db.get(Course,course_id)

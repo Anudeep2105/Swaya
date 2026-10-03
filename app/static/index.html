@@ -58,6 +58,7 @@ code{font-family:Consolas,monospace}
 .course-choice{display:flex;align-items:flex-start;gap:10px;padding:12px;border:1px solid #d0d5dd;border-radius:9px;cursor:pointer}
 .course-choice input{width:auto;flex:0 0 auto;margin:3px 0 0}
 .course-choice span{display:block}
+.construction-notice{padding:13px 18px;background:#fffaeb;border:1px solid #fedf89;border-radius:10px;color:#93370d;margin:14px 0 22px}
 @media(max-width:800px){
  .sidebar{position:static;width:100%;height:auto}
  .app{display:block}
@@ -207,10 +208,12 @@ async function publicHome(){
     <nav class="public-nav"><strong>Swaya</strong><div class="nav-row">
       <button class="secondary" onclick="publicHome()">Home</button>
       <button class="secondary" onclick="aboutPage()">About</button>
+      <button class="secondary" onclick="feedbackPage()">Feedback</button>
       <button class="secondary" onclick="requestPage()">Contribute or request access</button>
       <button onclick="loginPage()">Learner / Admin sign in</button>
     </div></nav>
     <main class="public-wrap">
+      <div class="construction-notice" role="status"><strong>Swaya is under construction.</strong> We’re continuing to improve the website. Please excuse any inconvenience, and <button class="secondary" onclick="feedbackPage()">share feedback</button> if you run into an issue.</div>
       <section class="hero"><span class="pill">Learn at your pace. Shape your path.</span>
         <h1>Learning pathways for what you want to become.</h1>
         <p>Swaya helps learners build practical skills through clear, day-wise courses, hands-on practice, and steady progress.</p>
@@ -222,6 +225,32 @@ async function publicHome(){
       </section>
       <section class="card" style="margin-top:28px"><h2>Build learning with us</h2><p>We welcome contributors, subject experts, and content developers who want to make practical learning more accessible.</p><button onclick="requestPage('contributor')">Share your interest</button> <button class="secondary" onclick="requestPage('content_developer')">Create learning content</button></section>
     </main>`;
+}
+
+function feedbackPage(){
+  pushPage(feedbackPage);
+  $('#app').innerHTML=`<nav class="public-nav"><strong>Swaya</strong><div class="nav-row"><button class="secondary" onclick="publicHome()">Home</button><button onclick="loginPage()">Sign in</button></div></nav>
+    <main class="public-wrap"><div class="nav-row"><button class="secondary" onclick="publicHome()">&#8592; Home</button></div>
+    <section class="card" style="max-width:760px;margin:20px auto"><h1>Send feedback</h1><p class="muted">Tell us what happened. You can attach an optional screenshot to help us understand the issue. Screenshots are limited to 5 MB (PNG, JPG, or WEBP).</p>
+      <form onsubmit="submitFeedback(event)">
+        <label>Your name</label><input id="feedbackName" required minlength="2" maxlength="120" autocomplete="name">
+        <label>Email address</label><input id="feedbackEmail" type="email" required maxlength="255" autocomplete="email">
+        <label>What happened?</label><textarea id="feedbackMessage" rows="5" required minlength="5" maxlength="3000" placeholder="Describe what you were doing and what went wrong."></textarea>
+        <label>Screenshot (optional)</label><input id="feedbackScreenshot" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp">
+        <button id="feedbackSubmit">Send feedback</button><div id="feedbackMsg" style="margin-top:12px" aria-live="polite"></div>
+      </form>
+    </section></main>`;
+}
+
+async function submitFeedback(event){
+  event.preventDefault();
+  const msg=$('#feedbackMsg'),file=$('#feedbackScreenshot').files[0];
+  if(file&&file.size>5*1024*1024){msg.className='error';msg.textContent='Screenshot must be 5 MB or smaller.';return;}
+  const form=new FormData();form.append('name',$('#feedbackName').value);form.append('email',$('#feedbackEmail').value);form.append('message',$('#feedbackMessage').value);if(file)form.append('screenshot',file);
+  msg.className='muted';msg.textContent='Sending…';$('#feedbackSubmit').disabled=true;
+  try{const data=await api('/public/feedback',{method:'POST',body:form});msg.className='success';msg.textContent=data.message;event.target.reset();}
+  catch(e){msg.className='error';msg.textContent=e.message;}
+  finally{$('#feedbackSubmit').disabled=false;}
 }
 
 function aboutPage(){
@@ -405,6 +434,7 @@ function shell(content){
         <button onclick="publicHome()">&#127760; Public Home</button>
         <button onclick="dashboard()">&#127968; Dashboard</button>
         <button onclick="aboutPage()">&#8505; About Swaya</button>
+        <button onclick="feedbackPage()">&#128172; Feedback</button>
         <button onclick="course()">&#128218; Course</button>
         <button onclick="gamification()">&#128202; Progress</button>
         <button onclick="leaderboard()">&#127942; Leaderboard</button>
@@ -428,6 +458,7 @@ function shell(content){
           ? `<hr>
              <button onclick="adminUsers()">&#128100; Users</button>
              <button onclick="adminRequests()">&#9993; Public Requests</button>
+             <button onclick="adminFeedback()">&#128172; Feedback</button>
              <button onclick="auditLogs()">&#128196; Audit Logs</button>`
           : ''}
 
@@ -2773,6 +2804,21 @@ async function adminRequests(){
       ${(requests||[]).map(x=>`<tr><td>${esc(new Date(x.created_at).toLocaleString())}</td><td>${esc(x.request_type.replaceAll('_',' '))}</td><td>${esc(x.name)}<br><a href="mailto:${encodeURIComponent(x.email)}">${esc(x.email)}</a></td><td>${esc(x.course||'—')}</td><td style="white-space:pre-wrap;min-width:220px">${esc(x.message||'—')}</td><td><select aria-label="Request status" onchange="setPublicRequestStatus(${x.id},this.value)">${['new','reviewed','approved','declined'].map(s=>`<option value="${s}" ${x.status===s?'selected':''}>${s}</option>`).join('')}</select></td></tr>`).join('')||'<tr><td colspan="6">No requests have arrived yet.</td></tr>'}
       </table></div>`);
   }catch(e){shell(`<div class="card"><h1>Public Requests</h1><p class="error">${esc(e.message)}</p></div>`);}
+}
+
+async function adminFeedback(){
+  pushPage(adminFeedback);
+  try{
+    const items=await api('/admin/feedback');
+    shell(`<div class="nav-row">${backButton()}</div><h1>Feedback</h1><div class="card" style="overflow:auto"><table><tr><th>Received</th><th>From</th><th>Message</th><th>Screenshot</th></tr>
+      ${(items||[]).map(x=>`<tr><td>${esc(new Date(x.created_at).toLocaleString())}</td><td>${esc(x.name)}<br><a href="mailto:${encodeURIComponent(x.email)}">${esc(x.email)}</a></td><td style="white-space:pre-wrap;min-width:260px">${esc(x.message)}</td><td>${x.screenshot?`<button class="secondary" onclick="openFeedbackScreenshot(${x.id})">Open screenshot</button>`:'—'}</td></tr>`).join('')||'<tr><td colspan="4">No feedback received yet.</td></tr>'}
+      </table></div>`);
+  }catch(e){shell(`<div class="card"><h1>Feedback</h1><p class="error">${esc(e.message)}</p></div>`);}
+}
+
+async function openFeedbackScreenshot(id){
+  try{const response=await fetch(API+'/admin/feedback/'+id+'/screenshot',{headers:{Authorization:'Bearer '+localStorage.getItem('token')}});if(!response.ok)throw new Error('Unable to open screenshot.');const url=URL.createObjectURL(await response.blob());window.open(url,'_blank','noopener');setTimeout(()=>URL.revokeObjectURL(url),60000);}
+  catch(e){alert(e.message);}
 }
 
 async function setPublicRequestStatus(id,status){
