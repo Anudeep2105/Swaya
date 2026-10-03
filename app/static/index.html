@@ -54,6 +54,10 @@ code{font-family:Consolas,monospace}
 .hero p{font-size:18px;line-height:1.6;max-width:730px;color:#e0eaff}
 .course-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
 .public-nav button{margin:0}
+.course-choice-list{display:grid;gap:10px;margin:10px 0 18px}
+.course-choice{display:flex;align-items:flex-start;gap:10px;padding:12px;border:1px solid #d0d5dd;border-radius:9px;cursor:pointer}
+.course-choice input{width:auto;flex:0 0 auto;margin:3px 0 0}
+.course-choice span{display:block}
 @media(max-width:800px){
  .sidebar{position:static;width:100%;height:auto}
  .app{display:block}
@@ -325,7 +329,10 @@ async function login(e){
   }
 }
 
-function registerPage(){
+async function registerPage(){
+  let courses=[];
+  let courseError='';
+  try{courses=await api('/public/courses');}catch(e){courseError=e.message;}
   $('#app').innerHTML=`
     <div class="login-wrap">
       <div class="login-box">
@@ -342,6 +349,12 @@ function registerPage(){
           <input id="regPassword" type="password" autocomplete="new-password" required minlength="10" maxlength="128" aria-describedby="regPasswordHelp">
           <small id="regPasswordHelp" class="muted">Use at least 10 characters.</small>
 
+          <fieldset style="border:0;padding:0;margin:18px 0 10px">
+            <legend style="font-weight:700;margin-bottom:4px">Choose your courses</legend>
+            <p class="muted">Select one or more published courses to join.</p>
+            ${courses.length?`<div class="course-choice-list">${courses.map(c=>`<label class="course-choice"><input type="checkbox" name="regCourse" value="${Number(c.id)}"><span><strong>${esc(c.title)}</strong><br><span class="muted">${esc(c.description||'Published learning path')}</span></span></label>`).join('')}</div>`:`<p class="${courseError?'error':'muted'}">${esc(courseError||'There are no published courses available to select right now.')}</p>`}
+          </fieldset>
+
           <button style="width:100%">Register</button>
         </form>
 
@@ -354,13 +367,20 @@ function registerPage(){
 async function register(e){
   e.preventDefault();
 
+  const courseIds=[...document.querySelectorAll('input[name="regCourse"]:checked')].map(input=>Number(input.value));
+  if(!courseIds.length){
+    $('#regMsg').innerHTML='<p class="error">Select at least one published course before registering.</p>';
+    return;
+  }
+
   try{
     await api('/auth/register',{
       method:'POST',
       body:JSON.stringify({
         name:$('#regName').value,
         email:$('#regEmail').value,
-        password:$('#regPassword').value
+        password:$('#regPassword').value,
+        course_ids:courseIds
       })
     });
 

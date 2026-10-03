@@ -524,9 +524,15 @@ def python_progress(
 def register(request:Request,x:RegisterIn,db:Session=Depends(get_db)):
     email=x.email.lower()
     if db.scalar(select(User).where(User.email==email)): raise HTTPException(409,'Email already registered')
+    course_ids=set(x.course_ids)
+    courses=db.scalars(select(Course).where(Course.id.in_(course_ids),Course.status=='published').order_by(Course.id)).all()
+    if len(courses)!=len(course_ids) or len(course_ids)!=len(x.course_ids):
+        raise HTTPException(400,'One or more selected courses are unavailable. Refresh the page and choose published courses.')
     u=User(name=x.name,email=email,password_hash=hash_password(x.password),role='learner',email_verified=True); db.add(u); db.flush()
-    course=db.scalar(select(Course).where(Course.slug=='data-engineering-30-day')); cohort=db.scalar(select(Cohort).where(Cohort.course_id==course.id).order_by(Cohort.id))
-    db.add(Enrollment(user_id=u.id,course_id=course.id,cohort_id=cohort.id if cohort else None)); audit(db,u,'register','user',u.id,request); db.commit()
+    for course in courses:
+        cohort=db.scalar(select(Cohort).where(Cohort.course_id==course.id,Cohort.status=='active').order_by(Cohort.id))
+        db.add(Enrollment(user_id=u.id,course_id=course.id,cohort_id=cohort.id if cohort else None))
+    audit(db,u,'register','user',u.id,request); db.commit()
     return tokens(u)
 
 def tokens(u): return {'access_token':make_token(u),'refresh_token':make_token(u,'refresh'),'token_type':'bearer','user':{'id':u.id,'name':u.name,'email':u.email,'role':u.role}}
