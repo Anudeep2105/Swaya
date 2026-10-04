@@ -1048,6 +1048,14 @@ def delete_question(question_id:int,user=Depends(require_roles('admin','instruct
     if not q: raise HTTPException(404,'Question not found')
     db.delete(q); db.commit(); return {'ok':True}
 
+@app.post('/api/admin/questions/bulk-delete')
+def bulk_delete_questions(x:QuestionBulkDeleteIn,user=Depends(require_roles('admin','instructor','content_moderator')),db:Session=Depends(get_db)):
+    ids=set(x.ids)
+    questions=db.scalars(select(Question).where(Question.id.in_(ids))).all()
+    for question in questions: db.delete(question)
+    db.commit()
+    return {'deleted':len(questions)}
+
 @app.get('/api/admin/questions/template.xlsx')
 def question_template(user=Depends(require_roles('admin','instructor','content_moderator'))):
     from openpyxl import Workbook

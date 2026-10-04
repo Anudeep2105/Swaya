@@ -87,6 +87,7 @@ let pythonIndex=0;
 let adminMfaSetupToken='';
 let questionBankItems=[];
 let questionTargets=[];
+let selectedQuestionIds=new Set();
 
 function $(s){return document.querySelector(s)}
 function esc(v){
@@ -2376,6 +2377,8 @@ async function questions(){
   try{
     const [qs,targets]=await Promise.all([api('/admin/questions'),api('/admin/question-targets')]);
     questionBankItems=qs||[];questionTargets=targets||[];
+    const availableIds=new Set(questionBankItems.map(q=>Number(q.id)));
+    selectedQuestionIds=new Set([...selectedQuestionIds].filter(id=>availableIds.has(Number(id))));
     const groups=new Map();
     questionBankItems.forEach(q=>{
       const key=q.course_id+':'+q.lesson_id;
@@ -2411,19 +2414,52 @@ async function questions(){
         <input id="questionSearch"
                placeholder="&#128269; Search courses, lessons, questions or topics..."
                oninput="filterQuestions()">
+        <div class="nav-row" style="margin:12px 0 0">
+          <button class="secondary" onclick="selectAllQuestions(true)">Select all questions</button>
+          <button class="secondary" onclick="selectAllQuestions(false)">Clear selection</button>
+          <button class="danger" id="deleteSelectedQuestionsButton" onclick="deleteSelectedQuestions()" ${selectedQuestionIds.size?'':'disabled'}>Delete selected (${selectedQuestionIds.size})</button>
+        </div>
       </div>
 
       ${groups.size?[...groups.values()].map(g=>`
         <details class="card question-group" open>
           <summary><strong>${esc(g.course_code)} — ${esc(g.course_title)}</strong> · Day ${esc(g.day_number)} — ${esc(g.lesson_title)} <span class="muted">(${g.items.length} questions)</span></summary>
-          <div style="overflow:auto;margin-top:14px"><table class="questionTable"><tr><th>Question</th><th>Difficulty</th><th>Topic</th><th>Status</th><th>Action</th></tr>
-            ${g.items.map(q=>`<tr data-search="${esc((g.course_code+' '+g.course_title+' '+g.day_number+' '+g.lesson_title+' '+q.question+' '+q.topic).toLowerCase())}"><td>${esc(q.question)}</td><td>${esc(q.difficulty||'-')}</td><td>${esc(q.topic||'-')}</td><td>${q.active?'<span class="pill">Active</span>':'Inactive'}</td><td><button class="secondary" onclick="editQuestion(${q.id})">Edit</button> <button class="secondary" onclick="deleteQuestion(${q.id})">Delete</button></td></tr>`).join('')}
+          <div style="overflow:auto;margin-top:14px"><table class="questionTable"><tr><th>Select</th><th>Question</th><th>Difficulty</th><th>Topic</th><th>Status</th><th>Action</th></tr>
+            ${g.items.map(q=>`<tr data-search="${esc((g.course_code+' '+g.course_title+' '+g.day_number+' '+g.lesson_title+' '+q.question+' '+q.topic).toLowerCase())}"><td><input type="checkbox" aria-label="Select question ${q.id}" style="width:auto;margin:0" ${selectedQuestionIds.has(Number(q.id))?'checked':''} onchange="toggleQuestionSelection(${q.id},this.checked)"></td><td>${esc(q.question)}</td><td>${esc(q.difficulty||'-')}</td><td>${esc(q.topic||'-')}</td><td>${q.active?'<span class="pill">Active</span>':'Inactive'}</td><td><button class="secondary" onclick="editQuestion(${q.id})">Edit</button> <button class="secondary" onclick="deleteQuestion(${q.id})">Delete</button></td></tr>`).join('')}
           </table></div>
         </details>`).join(''):'<div class="card"><p>No questions have been added yet. Add one or use the bulk upload templates above.</p></div>'}
     `);
   }catch(e){
     shell(`<h1>Question Bank</h1><div class="card"><p class="error">${esc(e.message)}</p></div>`);
   }
+}
+
+function updateQuestionSelectionButton(){
+  const button=$('#deleteSelectedQuestionsButton');
+  if(button){button.disabled=!selectedQuestionIds.size;button.textContent=`Delete selected (${selectedQuestionIds.size})`;}
+}
+
+function toggleQuestionSelection(id,selected){
+  if(selected)selectedQuestionIds.add(Number(id));else selectedQuestionIds.delete(Number(id));
+  updateQuestionSelectionButton();
+}
+
+function selectAllQuestions(selected){
+  selectedQuestionIds=selected?new Set(questionBankItems.map(q=>Number(q.id))):new Set();
+  document.querySelectorAll('.questionTable input[type="checkbox"]').forEach(box=>{box.checked=selected;});
+  updateQuestionSelectionButton();
+}
+
+async function deleteSelectedQuestions(){
+  const ids=[...selectedQuestionIds];
+  if(!ids.length)return;
+  if(!confirm(`Permanently delete ${ids.length} selected question${ids.length===1?'':'s'}? This cannot be undone.`))return;
+  try{
+    const result=await api('/admin/questions/bulk-delete',{method:'POST',body:JSON.stringify({ids})});
+    selectedQuestionIds=new Set();
+    await questions();
+    alert(`${result.deleted} question${result.deleted===1?'':'s'} deleted.`);
+  }catch(e){alert(e.message);}
 }
 
 function filterQuestions(){
@@ -2607,16 +2643,26 @@ shell(`
 }catch(e){
 shell(`<h1>Users</h1><div class="card"><p class="error">${esc(e.message)}</p></div>`);
 }
+}
 
-function downloadQuestionTemplate(format){
+async function downloadQuestionTemplate(format){
   const headers=['course_code','lesson_code','day_number','question','option_a','option_b','option_c','option_d','correct_answer','explanation','resource_url','difficulty','topic','tags','active'];
   if(format==='xlsx'){
-    fetch(API+'/admin/questions/template.xlsx',{headers:{Authorization:'Bearer '+localStorage.getItem('token')}}).then(async r=>{if(!r.ok)throw new Error('Unable to download Excel template.');const blob=await r.blob();const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download='swaya-question-bank-template.xlsx';link.click();URL.revokeObjectURL(link.href);}).catch(e=>alert(e.message));return;
+    try{
+      const token=localStorage.getItem('token');
+      const response=await fetch(API+'/admin/questions/template.xlsx',{headers:token?{Authorization:'Bearer '+token}:{}});
+      if(!response.ok){let data=null;try{data=await response.json()}catch{}throw new Error(formatApiError(data,response.status));}
+      const blob=await response.blob();
+      const url=URL.createObjectURL(blob),link=document.createElement('a');
+      link.href=url;link.download='swaya-question-bank-template.xlsx';link.style.display='none';document.body.appendChild(link);link.click();link.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+    }catch(e){alert(e.message||'Unable to download Excel template.');}
+    return;
   }
   const example=['3DDE','','1','Which format can identify a lesson?','Course code + day','Course title only','Email address','Question ID','A','Use course_code and either lesson_code or day_number.','','medium','Sample','template;example','true'];
   const delimiter=format==='txt'?'\t':',';
   const content=[headers,example].map(row=>row.map(v=>format==='txt'?v:'"'+String(v).replaceAll('"','""')+'"').join(delimiter)).join('\r\n');
-  const blob=new Blob(['\ufeff',content],{type:format==='txt'?'text/plain;charset=utf-8':'text/csv;charset=utf-8'});const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=`swaya-question-bank-template.${format}`;link.click();URL.revokeObjectURL(link.href);
+  const blob=new Blob(['\ufeff',content],{type:format==='txt'?'text/plain;charset=utf-8':'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`swaya-question-bank-template.${format}`;link.style.display='none';document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
 async function bulkUploadQuestions(){
@@ -2632,7 +2678,6 @@ async function deleteQuestion(id){
   if(!q||!confirm('Permanently delete this question from '+q.course_code+' / Day '+q.day_number+'?'))return;
   try{await api('/admin/questions/'+id,{method:'DELETE'});await questions();}
   catch(e){alert(e.message);}
-}
 }
 
 function newAdminUser(){

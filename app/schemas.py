@@ -11,6 +11,7 @@ class PublicRequestStatusIn(BaseModel): status:str
 class CourseIn(BaseModel): title:str; slug:str; description:str=''; status:str='draft'
 class LessonIn(BaseModel): day_number:int=Field(ge=1,le=365); title:str; goal:str=''; content_md:str=''; content_html:str=''; content_css:str=''; objectives:list[str]=[]; resources:list[dict[str,Any]]=[]; estimated_minutes:int=60; status:str='published'
 class QuestionIn(BaseModel): lesson_id:int; question:str; options:list[str]; correct_index:int; explanation:str=''; resource_url:str=''; difficulty:str='medium'; topic:str=''; tags:list[str]=[]; active:bool=True
+class QuestionBulkDeleteIn(BaseModel): ids:list[int]=Field(min_length=1,max_length=2000)
 class AssignmentIn(BaseModel): lesson_id:int; title:str; description:str=''; submission_type:str='file_or_github'; max_score:int=100; due_date:str|None=None
 class ReviewIn(BaseModel): score:float; feedback:str=''
 class TaskCompleteIn(BaseModel): done:bool=True
