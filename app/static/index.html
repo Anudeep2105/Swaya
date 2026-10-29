@@ -96,6 +96,7 @@ let currentLesson=null;
 let currentCourseId=null;
 let quizQuestions=[];
 let historyStack=[];
+let restoringPageHistory=false;
 let pythonExercises=[];
 let pythonIndex=0;
 let adminMfaSetupToken='';
@@ -149,14 +150,21 @@ async function api(path,opts={}){
 
 function setView(html){$('#view').innerHTML=html}
 function pushPage(fn){
+  if(restoringPageHistory) return;
   if(historyStack[historyStack.length-1]!==fn) historyStack.push(fn);
 }
-function goBack(){
+async function goBack(){
   if(historyStack.length>1){
     historyStack.pop();
     const fn=historyStack[historyStack.length-1];
-    if(typeof fn==='function') fn();
-  }else dashboard();
+    if(typeof fn==='function'){
+      restoringPageHistory=true;
+      try{await fn()}finally{restoringPageHistory=false;}
+    }
+  }else{
+    restoringPageHistory=true;
+    try{await dashboard()}finally{restoringPageHistory=false;}
+  }
 }
 
 function backButton(){
@@ -684,6 +692,7 @@ currentCourseId=c?.id || null;
     const courseMedia=c?await api('/courses/'+c.id+'/media'):[];
 
     shell(`
+      <div class="nav-row">${backButton()}</div>
       <h1>${esc(c?.title||'Learning Course')}</h1>
 
       <div class="card">
