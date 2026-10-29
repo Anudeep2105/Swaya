@@ -23,7 +23,7 @@ def _lesson_content(item, deep_dive=None):
         if item.get("index") == 0 and NOTES_PATH.is_file():
             body.append(NOTES_PATH.read_text(encoding="utf-8").strip())
         body += ["# Quick concepts", "Short answers for terms that are easy to overlook in an interview."]
-        body.extend(f"## {question}\n\n{answer}" for question, answer in item["items"])
+        body.extend(f"## {row[0]}\n\n{row[1]}" for row in item["items"])
         if item.get("deep_dives"):
             body += ["# Interview follow-ups"]
             body.extend(f"## {q[0]}\n\n{q[1]}" for q in item["deep_dives"])
@@ -101,7 +101,7 @@ def _quiz_questions(lesson, lesson_number, data):
     all_answers = list(dict.fromkeys(row[1] for row in data["quickQuestions"]))
     rng = random.Random(f"soc-course-{lesson_number}")
     result = []
-    for question, answer in source[:5]:
+    for row in source[:5]:\n        question, answer = row[0], row[1]
         distractors = [choice for choice in all_answers if choice != answer]
         options = rng.sample(distractors, 3) + [answer]
         rng.shuffle(options)
