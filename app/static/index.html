@@ -898,7 +898,7 @@ function markdownToHtml(md){
       continue;
     }
 
-    const quote=line.match(/^\s*&gt;\s?(.*)$/);
+    const quote=line.match(/^\s*>\s?(.*)$/);
     if(quote){
       flushTextBlocks();
       blocks.push('<blockquote>'+markdownInline(quote[1])+'</blockquote>');
