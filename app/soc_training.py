@@ -101,7 +101,8 @@ def _quiz_questions(lesson, lesson_number, data):
     all_answers = list(dict.fromkeys(row[1] for row in data["quickQuestions"]))
     rng = random.Random(f"soc-course-{lesson_number}")
     result = []
-    for row in source[:5]:\n        question, answer = row[0], row[1]
+    for row in source[:5]:
+        question, answer = row[0], row[1]
         distractors = [choice for choice in all_answers if choice != answer]
         options = rng.sample(distractors, 3) + [answer]
         rng.shuffle(options)
