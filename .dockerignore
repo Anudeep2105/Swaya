@@ -2,6 +2,8 @@
 !requirements.txt
 !app/
 !app/*.py
+!app/soc_training_content.json
+!app/soc_basics_notes.md
 app/*_before*.py
 app/__pycache__/
 !app/static/
