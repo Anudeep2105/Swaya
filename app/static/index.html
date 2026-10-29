@@ -59,7 +59,14 @@ code{font-family:Consolas,monospace}
 .lesson-markdown a{color:#175cd3}
 .lesson-markdown .task-state{display:inline-block;min-width:1.35em;font-weight:700;color:#175cd3}
 .question{border:1px solid #eaecf0;border-radius:10px;padding:18px;margin-bottom:15px}
-.option{display:block;padding:8px;margin:5px 0}
+.question h3{line-height:1.45;margin:0 0 14px;overflow-wrap:anywhere}
+.assessment-form{max-width:900px}
+.option{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;margin:8px 0;border:1px solid #d0d5dd;border-radius:9px;background:#fff;color:#344054;font-weight:400;line-height:1.5;cursor:pointer;transition:background .15s,border-color .15s}
+.option:hover{border-color:#84adff;background:#f8fbff}
+.option:focus-within{outline:2px solid #84adff;outline-offset:2px}
+.option:has(input[type="radio"]:checked){border-color:#2563eb;background:#eff6ff}
+.option input[type="radio"]{flex:0 0 18px;width:18px;height:18px;margin:2px 0 0;padding:0;accent-color:#2563eb}
+.option span{display:block;flex:1;min-width:0;overflow-wrap:anywhere}
 .public-nav{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px max(20px,calc((100% - 1200px)/2));background:#101828;color:#fff}
 .public-nav strong{font-size:21px}.public-nav .nav-row{margin:0}
 .public-wrap{max-width:1200px;margin:auto;padding:32px 20px 64px}
@@ -996,7 +1003,7 @@ async function takeQuiz(id){
         <p><strong>Mastery requirement: 5/5</strong></p>
       </div>
 
-      <form onsubmit="submitQuiz(event,${id})">
+      <form class="assessment-form" onsubmit="submitQuiz(event,${id})">
 
         ${quizQuestions.map((q,i)=>`
           <div class="question">
@@ -1008,7 +1015,7 @@ async function takeQuiz(id){
                        name="q_${q.id}"
                        value="${j}"
                        required>
-                ${esc(o)}
+                <span>${esc(o)}</span>
               </label>`).join('')}
           </div>
         `).join('')}
