@@ -17,6 +17,7 @@ from .schemas import *
 from .auth import *
 from .services import add_xp, make_certificate, token_hash, random_token
 from .storage import CloudStorageError, delete_file as delete_cloud_file, enabled as cloud_storage_enabled, open_file as open_cloud_file, require_remote_storage, upload_file as upload_cloud_file
+from .soc_training import seed_soc_course
 
 if os.getenv('APP_ENV', 'development').lower() == 'production':
     if not os.getenv('DATABASE_URL', '').startswith(('postgresql://', 'postgresql+psycopg://')):
@@ -189,6 +190,16 @@ def seed_data():
     db.close()
 seed_data()
 
+
+def seed_soc_training_course():
+    db = next(get_db())
+    try:
+        seed_soc_course(db, generate_lesson_code)
+    finally:
+        db.close()
+
+
+seed_soc_training_course()
 
 
 # ==================== PYTHON PRACTICE LAB ====================

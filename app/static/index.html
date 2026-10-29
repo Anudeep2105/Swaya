@@ -670,7 +670,7 @@ currentCourseId=c?.id || null;
     const courseMedia=c?await api('/courses/'+c.id+'/media'):[];
 
     shell(`
-      <h1>30-Day Data Engineering Course</h1>
+      <h1>${esc(c?.title||'Learning Course')}</h1>
 
       <div class="card">
         <h2>${esc(c?.title||'Data Engineering')}</h2>
