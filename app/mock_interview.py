@@ -66,7 +66,7 @@ def _soc_questions(lesson_title, day_number):
             })
         return result
 
-    match = re.search(r"(?:SOC-\\d{3}|LAB-\\d{2}|Q-\\d{2})", title, re.I)
+    match = re.search(r"(?:SOC-\d{3}|LAB-\d{2}|Q-\d{2})", title, re.I)
     case_id = match.group(0).upper() if match else ""
     for item in data.get("scenarios", []):
         if item.get("id") == case_id:
