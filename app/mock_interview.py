@@ -66,7 +66,7 @@ def _soc_questions(lesson_title, day_number):
             })
         return result
 
-    match = re.search(r"SOC-\d{3}", title, re.I)
+    match = re.search(r"(?:SOC-\\d{3}|LAB-\\d{2}|Q-\\d{2})", title, re.I)
     case_id = match.group(0).upper() if match else ""
     for item in data.get("scenarios", []):
         if item.get("id") == case_id:
@@ -197,7 +197,7 @@ def score_answers(questions, answers):
         met, missing = [], []
         for criterion in question.get("criteria", []):
             terms = [term.lower().strip() for term in criterion.get("terms", []) if term]
-            found = [term for term in terms if f" {term} " in text or term in text]
+            found = [term for term in terms if f" {term} " in text ]
             covered = bool(found) if criterion.get("mode") != "all" else bool(terms) and len(found) == len(terms)
             label = criterion.get("label", "Key concept")
             (met if covered else missing).append(label)
