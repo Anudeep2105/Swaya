@@ -1573,7 +1573,7 @@ def mock_interview_history(user=Depends(current_user), db:Session=Depends(get_db
         select(MockInterviewSession, Course, Lesson)
         .join(Course, Course.id == MockInterviewSession.course_id)
         .join(Lesson, Lesson.id == MockInterviewSession.lesson_id)
-        .where(MockInterviewSession.user_id == user.id)
+        .where(MockInterviewSession.user_id == user.id, MockInterviewSession.status == 'submitted')
         .order_by(desc(MockInterviewSession.created_at))
         .limit(20)
     ).all()
