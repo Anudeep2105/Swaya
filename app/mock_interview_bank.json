@@ -45,6 +45,18 @@
     "splunk": {
       "title": "Splunk Search Reference",
       "url": "https://docs.splunk.com/Documentation/Splunk/latest/SearchReference"
+    },
+    "bash": {
+      "title": "GNU Bash Reference Manual",
+      "url": "https://www.gnu.org/software/bash/manual/bash.html"
+    },
+    "managed_identity": {
+      "title": "Microsoft Learn: Managed identities for Azure resources",
+      "url": "https://learn.microsoft.com/en-us/entra/identity/managed-identities-azure-resources/overview"
+    },
+    "data_architecture": {
+      "title": "Google Cloud: Data lakes and data warehouses",
+      "url": "https://cloud.google.com/architecture/data-lakes-and-data-warehouses"
     }
   },
   "domains": [
@@ -98,7 +110,8 @@
               "quality metric",
               "alert"
             ]
-          ]
+          ],
+          "python"
         ],
         [
           "python-02",
@@ -129,7 +142,8 @@
               "large",
               "size"
             ]
-          ]
+          ],
+          "python"
         ],
         [
           "python-03",
@@ -162,7 +176,8 @@
               "exception",
               "retry"
             ]
-          ]
+          ],
+          "python"
         ],
         [
           "python-04",
@@ -195,7 +210,8 @@
               "dead letter",
               "429"
             ]
-          ]
+          ],
+          "python"
         ],
         [
           "python-05",
@@ -227,7 +243,8 @@
               "ordering",
               "deduplicate"
             ]
-          ]
+          ],
+          "python"
         ],
         [
           "python-06",
@@ -257,7 +274,8 @@
               "original",
               "unchanged"
             ]
-          ]
+          ],
+          "python"
         ],
         [
           "python-07",
@@ -290,7 +308,8 @@
               "sensitive",
               "request id"
             ]
-          ]
+          ],
+          "python"
         ],
         [
           "python-08",
@@ -322,7 +341,8 @@
               "null",
               "correct"
             ]
-          ]
+          ],
+          "python"
         ]
       ]
     },
@@ -370,7 +390,8 @@
               "mask",
               "deduplicate"
             ]
-          ]
+          ],
+          "sql"
         ],
         [
           "sql-02",
@@ -400,7 +421,8 @@
               "row per",
               "result"
             ]
-          ]
+          ],
+          "sql"
         ],
         [
           "sql-03",
@@ -430,7 +452,8 @@
               "validate",
               "duplicate"
             ]
-          ]
+          ],
+          "sql"
         ],
         [
           "sql-04",
@@ -462,7 +485,8 @@
               "storage",
               "measure"
             ]
-          ]
+          ],
+          "sql"
         ],
         [
           "sql-05",
@@ -491,7 +515,8 @@
               "sum",
               "validate"
             ]
-          ]
+          ],
+          "sql"
         ],
         [
           "sql-06",
@@ -521,7 +546,8 @@
               "default",
               "business meaning"
             ]
-          ]
+          ],
+          "sql"
         ],
         [
           "sql-07",
@@ -552,7 +578,8 @@
               "materialize",
               "query"
             ]
-          ]
+          ],
+          "sql"
         ],
         [
           "sql-08",
@@ -584,7 +611,8 @@
               "document",
               "difference"
             ]
-          ]
+          ],
+          "sql"
         ]
       ]
     },
@@ -634,7 +662,8 @@
               "lag",
               "monitor"
             ]
-          ]
+          ],
+          "airflow"
         ],
         [
           "pipe-02",
@@ -663,7 +692,8 @@
               "replay",
               "duplicate"
             ]
-          ]
+          ],
+          "airflow"
         ],
         [
           "pipe-03",
@@ -696,7 +726,8 @@
               "preserve",
               "raw"
             ]
-          ]
+          ],
+          "dbt"
         ],
         [
           "pipe-04",
@@ -728,7 +759,8 @@
               "lineage",
               "trace"
             ]
-          ]
+          ],
+          "airflow"
         ],
         [
           "pipe-05",
@@ -759,7 +791,8 @@
               "reconcile",
               "document"
             ]
-          ]
+          ],
+          "dbt"
         ],
         [
           "pipe-06",
@@ -790,7 +823,8 @@
               "replay",
               "reconcile"
             ]
-          ]
+          ],
+          "airflow"
         ],
         [
           "pipe-07",
@@ -823,7 +857,8 @@
               "commit",
               "effectively once"
             ]
-          ]
+          ],
+          "airflow"
         ],
         [
           "pipe-08",
@@ -854,7 +889,8 @@
               "breaking",
               "migration"
             ]
-          ]
+          ],
+          "dbt"
         ]
       ]
     },
@@ -894,7 +930,8 @@
               "change",
               "late"
             ]
-          ]
+          ],
+          "dbt"
         ],
         [
           "model-02",
@@ -925,7 +962,8 @@
               "memory",
               "correct"
             ]
-          ]
+          ],
+          "pandas"
         ],
         [
           "model-03",
@@ -956,7 +994,8 @@
               "dependency",
               "grain"
             ]
-          ]
+          ],
+          "dbt"
         ],
         [
           "model-04",
@@ -986,7 +1025,8 @@
               "workload",
               "consistency"
             ]
-          ]
+          ],
+          "dbt"
         ],
         [
           "model-05",
@@ -1017,7 +1057,8 @@
               "join",
               "test"
             ]
-          ]
+          ],
+          "dbt"
         ],
         [
           "model-06",
@@ -1049,7 +1090,8 @@
               "fact",
               "dimension"
             ]
-          ]
+          ],
+          "dbt"
         ],
         [
           "model-07",
@@ -1080,7 +1122,8 @@
               "test",
               "regression"
             ]
-          ]
+          ],
+          "dbt"
         ],
         [
           "model-08",
@@ -1111,7 +1154,8 @@
               "assert",
               "test"
             ]
-          ]
+          ],
+          "pandas"
         ]
       ]
     },
@@ -1156,7 +1200,8 @@
               "compare",
               "executor"
             ]
-          ]
+          ],
+          "spark"
         ],
         [
           "dist-02",
@@ -1188,7 +1233,8 @@
               "measure",
               "performance"
             ]
-          ]
+          ],
+          "spark"
         ],
         [
           "dist-03",
@@ -1218,7 +1264,8 @@
               "failure",
               "monitor"
             ]
-          ]
+          ],
+          "airflow"
         ],
         [
           "dist-04",
@@ -1248,7 +1295,8 @@
               "scale",
               "cost"
             ]
-          ]
+          ],
+          "data_architecture"
         ],
         [
           "dist-05",
@@ -1280,7 +1328,8 @@
               "deny",
               "test"
             ]
-          ]
+          ],
+          "managed_identity"
         ],
         [
           "dist-06",
@@ -1310,7 +1359,8 @@
               "read",
               "write"
             ]
-          ]
+          ],
+          "spark"
         ],
         [
           "dist-07",
@@ -1343,7 +1393,8 @@
               "rollback",
               "retry"
             ]
-          ]
+          ],
+          "airflow"
         ],
         [
           "dist-08",
@@ -1374,7 +1425,8 @@
               "measure",
               "cost"
             ]
-          ]
+          ],
+          "spark"
         ]
       ]
     },
@@ -1421,7 +1473,8 @@
               "infrastructure",
               "code"
             ]
-          ]
+          ],
+          "bash"
         ],
         [
           "ops-02",
@@ -1452,7 +1505,8 @@
               "rollback",
               "document"
             ]
-          ]
+          ],
+          "git"
         ],
         [
           "ops-03",
@@ -1484,7 +1538,8 @@
               "owner",
               "next step"
             ]
-          ]
+          ],
+          "airflow"
         ],
         [
           "ops-04",
@@ -1515,7 +1570,8 @@
               "revoke",
               "audit"
             ]
-          ]
+          ],
+          "managed_identity"
         ],
         [
           "ops-05",
@@ -1549,7 +1605,8 @@
               "improve",
               "next"
             ]
-          ]
+          ],
+          "git"
         ],
         [
           "ops-06",
@@ -1581,7 +1638,8 @@
               "monitor",
               "log"
             ]
-          ]
+          ],
+          "managed_identity"
         ],
         [
           "ops-07",
@@ -1613,7 +1671,8 @@
               "trace",
               "correlate"
             ]
-          ]
+          ],
+          "airflow"
         ],
         [
           "ops-08",
@@ -1645,7 +1704,8 @@
               "test",
               "merge"
             ]
-          ]
+          ],
+          "git"
         ],
         [
           "ops-09",
@@ -1677,7 +1737,8 @@
               "uncertainty",
               "improve"
             ]
-          ]
+          ],
+          "airflow"
         ],
         [
           "ops-10",
@@ -1710,7 +1771,8 @@
               "assumption",
               "service"
             ]
-          ]
+          ],
+          "git"
         ]
       ]
     }
