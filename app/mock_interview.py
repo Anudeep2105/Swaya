@@ -146,9 +146,9 @@ def _data_questions(lesson_title):
         matches = [next((d for d in _BANK.get("domains", []) if d.get("id") == "delivery"), _BANK.get("domains", [{}])[0])]
     items = []
     for domain in matches:
-        source = _source(domain.get("source"))
         for row in domain.get("questions", []):
-            question_id, prompt, model_answer, raw_criteria = row
+            question_id, prompt, model_answer, raw_criteria = row[:4]
+            source = _source(row[4] if len(row) > 4 else domain.get("source"))
             items.append({
                 "id": question_id,
                 "topic": domain.get("id", "course"),
