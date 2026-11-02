@@ -18,6 +18,7 @@ from .auth import *
 from .services import add_xp, make_certificate, token_hash, random_token
 from .storage import CloudStorageError, delete_file as delete_cloud_file, enabled as cloud_storage_enabled, open_file as open_cloud_file, require_remote_storage, upload_file as upload_cloud_file
 from .soc_training import seed_soc_course
+from .mock_interview import questions_for_module, public_question, score_answers
 
 if os.getenv('APP_ENV', 'development').lower() == 'production':
     if not os.getenv('DATABASE_URL', '').startswith(('postgresql://', 'postgresql+psycopg://')):
@@ -1466,6 +1467,143 @@ def mfa_enable(x:MFAEnableIn,request:Request,db:Session=Depends(get_db)):
     if not user or not user.active or user.role!='admin' or user.mfa_enabled: raise HTTPException(401,'Administrator setup session is invalid. Sign in again.')
     if not user.mfa_secret or not pyotp.TOTP(user.mfa_secret).verify(x.code): raise HTTPException(400,'Invalid authenticator code. Check the code and try again.')
     user.mfa_enabled=True; audit(db,user,'enable_mfa','user',user.id,request); db.commit(); return tokens(user)
+
+
+
+def _mock_interview_scope(course_id, lesson_id, user, db):
+    course = db.get(Course, course_id)
+    lesson = db.get(Lesson, lesson_id)
+    if not course or not lesson or lesson.course_id != course_id or course.status != 'published' or lesson.status != 'published':
+        raise HTTPException(404, 'Choose a published course module.')
+    if user.role == 'learner':
+        enrollment = db.scalar(select(Enrollment).where(
+            Enrollment.user_id == user.id,
+            Enrollment.course_id == course_id,
+            Enrollment.status == 'active'
+        ))
+        if not enrollment:
+            raise HTTPException(403, 'You are not enrolled in this course.')
+    return course, lesson
+
+
+@app.get('/api/mock-interviews/catalog')
+def mock_interview_catalog(user=Depends(current_user), db:Session=Depends(get_db)):
+    query = select(Course).where(Course.status == 'published').order_by(Course.id)
+    if user.role == 'learner':
+        query = query.join(Enrollment, Enrollment.course_id == Course.id).where(
+            Enrollment.user_id == user.id,
+            Enrollment.status == 'active'
+        )
+    courses = db.scalars(query).all()
+    catalog = []
+    for course in courses:
+        lessons = db.scalars(select(Lesson).where(
+            Lesson.course_id == course.id,
+            Lesson.status == 'published'
+        ).order_by(Lesson.day_number)).all()
+        if lessons:
+            catalog.append({
+                'id': course.id,
+                'title': course.title,
+                'course_code': course.course_code,
+                'modules': [{'id': lesson.id, 'title': lesson.title, 'day_number': lesson.day_number} for lesson in lessons]
+            })
+    return catalog
+
+
+@app.post('/api/mock-interviews/start')
+def start_mock_interview(x:MockInterviewStartIn, user=Depends(current_user), db:Session=Depends(get_db)):
+    course, lesson = _mock_interview_scope(x.course_id, x.lesson_id, user, db)
+    questions = questions_for_module(course.title, lesson.title, lesson.day_number)
+    if not questions:
+        raise HTTPException(404, 'There are no interview questions for this module yet.')
+    attempt = MockInterviewSession(
+        user_id=user.id,
+        course_id=course.id,
+        lesson_id=lesson.id,
+        questions_json=json.dumps(questions),
+        status='started'
+    )
+    db.add(attempt)
+    db.commit()
+    db.refresh(attempt)
+    return {
+        'id': attempt.id,
+        'course_title': course.title,
+        'module_title': lesson.title,
+        'questions': [public_question(question) for question in questions],
+        'voice_note': 'You can speak your answers or type them. Audio is not saved.'
+    }
+
+
+@app.post('/api/mock-interviews/{attempt_id}/submit')
+def submit_mock_interview(attempt_id:int, x:MockInterviewSubmitIn, request:Request, user=Depends(current_user), db:Session=Depends(get_db)):
+    attempt = db.get(MockInterviewSession, attempt_id)
+    if not attempt or attempt.user_id != user.id:
+        raise HTTPException(404, 'Mock interview not found.')
+    if attempt.status != 'started':
+        raise HTTPException(409, 'This interview has already been submitted.')
+    course, lesson = _mock_interview_scope(attempt.course_id, attempt.lesson_id, user, db)
+    questions = json.loads(attempt.questions_json)
+    submitted = [answer.model_dump() for answer in x.answers]
+    answer_ids = [answer['question_id'] for answer in submitted]
+    question_ids = [question['id'] for question in questions]
+    if len(answer_ids) != len(question_ids) or len(set(answer_ids)) != len(answer_ids) or set(answer_ids) != set(question_ids):
+        raise HTTPException(400, 'Submit one answer for each interview question.')
+    feedback = score_answers(questions, submitted)
+    attempt.answers_json = json.dumps(submitted)
+    attempt.feedback_json = json.dumps(feedback)
+    attempt.score = feedback['score']
+    attempt.status = 'submitted'
+    attempt.submitted_at = datetime.now(timezone.utc)
+    audit(db, user, 'mock_interview_submit', 'mock_interview', attempt.id, request)
+    db.commit()
+    return {
+        'id': attempt.id,
+        'course_title': course.title,
+        'module_title': lesson.title,
+        'created_at': attempt.created_at.isoformat(),
+        **feedback
+    }
+
+
+@app.get('/api/mock-interviews/history')
+def mock_interview_history(user=Depends(current_user), db:Session=Depends(get_db)):
+    rows = db.execute(
+        select(MockInterviewSession, Course, Lesson)
+        .join(Course, Course.id == MockInterviewSession.course_id)
+        .join(Lesson, Lesson.id == MockInterviewSession.lesson_id)
+        .where(MockInterviewSession.user_id == user.id)
+        .order_by(desc(MockInterviewSession.created_at))
+        .limit(20)
+    ).all()
+    return [{
+        'id': attempt.id,
+        'course_title': course.title,
+        'module_title': lesson.title,
+        'score': attempt.score,
+        'status': attempt.status,
+        'created_at': attempt.created_at.isoformat()
+    } for attempt, course, lesson in rows]
+
+
+@app.get('/api/mock-interviews/{attempt_id}')
+def mock_interview_report(attempt_id:int, user=Depends(current_user), db:Session=Depends(get_db)):
+    attempt = db.get(MockInterviewSession, attempt_id)
+    if not attempt or attempt.user_id != user.id:
+        raise HTTPException(404, 'Mock interview not found.')
+    if attempt.status != 'submitted':
+        raise HTTPException(409, 'Submit the interview before viewing its feedback.')
+    course = db.get(Course, attempt.course_id)
+    lesson = db.get(Lesson, attempt.lesson_id)
+    return {
+        'id': attempt.id,
+        'course_title': course.title if course else 'Course',
+        'module_title': lesson.title if lesson else 'Module',
+        'created_at': attempt.created_at.isoformat(),
+        **json.loads(attempt.feedback_json)
+    }
+
 
 @app.get('/')
 def index(): return FileResponse(STATIC/'index.html')
