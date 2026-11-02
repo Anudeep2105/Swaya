@@ -20,3 +20,15 @@ class UserAdminIn(BaseModel): active:bool|None=None; role:str|None=None; name:st
 class AdminUserCreateIn(BaseModel): name:str=Field(min_length=2,max_length=120); email:EmailStr; password:str=Field(min_length=10,max_length=128); role:str='learner'
 class CohortIn(BaseModel): course_id:int; name:str; start_date:str; end_date:str; status:str='active'
 
+class MockInterviewStartIn(BaseModel):
+    course_id: int = Field(gt=0)
+    lesson_id: int = Field(gt=0)
+
+
+class MockInterviewAnswerIn(BaseModel):
+    question_id: str = Field(min_length=1, max_length=100)
+    answer: str = Field(default='', max_length=4000)
+
+
+class MockInterviewSubmitIn(BaseModel):
+    answers: list[MockInterviewAnswerIn] = Field(min_length=1, max_length=5)
