@@ -1,0 +1,1086 @@
+{
+  "version": "1.0",
+  "description": "Original practice interview prompts authored from the course outcomes and public primary-source documentation. They are not copied from commercial interview banks.",
+  "sources": {
+    "python": {
+      "title": "Python Tutorial",
+      "url": "https://docs.python.org/3/tutorial/"
+    },
+    "sql": {
+      "title": "PostgreSQL Tutorial",
+      "url": "https://www.postgresql.org/docs/current/tutorial.html"
+    },
+    "git": {
+      "title": "Git Reference",
+      "url": "https://git-scm.com/docs"
+    },
+    "pandas": {
+      "title": "pandas User Guide",
+      "url": "https://pandas.pydata.org/docs/user_guide/"
+    },
+    "dbt": {
+      "title": "dbt Documentation",
+      "url": "https://docs.getdbt.com/docs/introduction"
+    },
+    "spark": {
+      "title": "Apache Spark SQL Guide",
+      "url": "https://spark.apache.org/docs/latest/sql-programming-guide.html"
+    },
+    "airflow": {
+      "title": "Apache Airflow Core Concepts",
+      "url": "https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/overview.html"
+    },
+    "nist": {
+      "title": "NIST Incident Response Recommendations",
+      "url": "https://csrc.nist.gov/pubs/sp/800/61/r3/final"
+    },
+    "mitre": {
+      "title": "MITRE ATT&CK",
+      "url": "https://attack.mitre.org/"
+    },
+    "sentinel": {
+      "title": "Microsoft Sentinel KQL Learning Path",
+      "url": "https://learn.microsoft.com/en-us/training/paths/sc-200-mitigate-threats-using-microsoft-sentinel/"
+    },
+    "splunk": {
+      "title": "Splunk Search Reference",
+      "url": "https://docs.splunk.com/Documentation/Splunk/latest/SearchReference"
+    }
+  },
+  "domains": [
+    {
+      "id": "python",
+      "lesson_keywords": [
+        "python",
+        "conditions",
+        "loops",
+        "lists",
+        "tuples",
+        "sets",
+        "dictionaries",
+        "functions",
+        "files",
+        "csv",
+        "json",
+        "apis"
+      ],
+      "source": "python",
+      "questions": [
+        [
+          "python-01",
+          "A data file sometimes contains malformed rows. How would you parse it so one bad record does not silently corrupt the whole load?",
+          "I would validate each record against an explicit schema, parse inside a narrow exception boundary, record the row and reason, and route invalid rows to a quarantine or error report. I would track rejected-row counts and fail the run if they exceed a defined threshold rather than silently dropping them.",
+          [
+            [
+              "schema or field validation",
+              "schema",
+              "validate",
+              "type check"
+            ],
+            [
+              "handle errors per record",
+              "row-level",
+              "record-level",
+              "exception",
+              "malformed"
+            ],
+            [
+              "quarantine or report rejected rows",
+              "quarantine",
+              "dead letter",
+              "error report",
+              "reject"
+            ],
+            [
+              "measure and set a failure threshold",
+              "threshold",
+              "rejected count",
+              "quality metric",
+              "alert"
+            ]
+          ]
+        ],
+        [
+          "python-02",
+          "When would you choose a dictionary over a list while processing event records?",
+          "I would use a list for ordered records that may contain duplicates, and a dictionary for key-based lookup or aggregation when a stable key is available. I would define duplicate-key behavior explicitly and consider memory cost if the input is large.",
+          [
+            [
+              "explain ordered collection versus key lookup",
+              "ordered",
+              "lookup",
+              "key"
+            ],
+            [
+              "identify duplicate behavior",
+              "duplicate",
+              "overwrite",
+              "collision"
+            ],
+            [
+              "connect structure to the operation",
+              "aggregate",
+              "mapping",
+              "membership"
+            ],
+            [
+              "consider memory or input size",
+              "memory",
+              "large",
+              "size"
+            ]
+          ]
+        ],
+        [
+          "python-03",
+          "A function is difficult to test because it reads files, calls an API, and transforms rows. How would you refactor it?",
+          "I would separate I/O from transformation: one function fetches or reads data, a pure function validates and transforms supplied records, and another writes results. I would inject dependencies or pass data explicitly, then test normal, empty, malformed, and API-failure cases.",
+          [
+            [
+              "separate I/O from transformation",
+              "separate",
+              "pure",
+              "transform"
+            ],
+            [
+              "pass dependencies or data explicitly",
+              "inject",
+              "dependency",
+              "argument"
+            ],
+            [
+              "test normal and edge cases",
+              "empty",
+              "malformed",
+              "edge",
+              "failure"
+            ],
+            [
+              "keep errors visible to the caller",
+              "raise",
+              "error",
+              "exception",
+              "retry"
+            ]
+          ]
+        ],
+        [
+          "python-04",
+          "An API request times out during a pipeline run. What retry strategy would you use, and what can go wrong?",
+          "I would retry only transient failures with a bounded attempt count and exponential backoff plus jitter. I would honor rate limits and timeouts, make writes idempotent or use an idempotency key, and send exhausted failures to a visible alert or dead-letter path.",
+          [
+            [
+              "retry transient failures only",
+              "transient",
+              "timeout",
+              "temporary"
+            ],
+            [
+              "bound retries and use backoff",
+              "bounded",
+              "attempt",
+              "backoff",
+              "jitter"
+            ],
+            [
+              "protect writes from duplicates",
+              "idempotent",
+              "idempotency",
+              "duplicate"
+            ],
+            [
+              "surface final failure and rate limits",
+              "rate limit",
+              "alert",
+              "dead letter",
+              "429"
+            ]
+          ]
+        ],
+        [
+          "python-05",
+          "How would you stream a very large CSV instead of loading it all into memory?",
+          "I would use chunked iteration, process and persist each chunk, and avoid building a second full-size copy of the dataset. I would define a checkpoint or restart strategy and verify that chunk boundaries do not break required ordering or aggregation semantics.",
+          [
+            [
+              "read in bounded chunks",
+              "chunk",
+              "iterator",
+              "stream"
+            ],
+            [
+              "avoid duplicate in-memory copies",
+              "memory",
+              "copy",
+              "bounded"
+            ],
+            [
+              "persist or checkpoint progress",
+              "checkpoint",
+              "resume",
+              "persist"
+            ],
+            [
+              "preserve correctness across boundaries",
+              "boundary",
+              "aggregation",
+              "ordering",
+              "deduplicate"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "sql",
+      "lesson_keywords": [
+        "sql",
+        "aggregation",
+        "joins",
+        "cte",
+        "window",
+        "postgres",
+        "database design",
+        "database",
+        "joins"
+      ],
+      "source": "sql",
+      "questions": [
+        [
+          "sql-01",
+          "A query that joins customers to orders returns more customer rows than expected. How do you find and correct the cause?",
+          "I would check the cardinality on both sides and verify whether the join key is unique. A one-to-many join naturally repeats customer columns. I would aggregate orders before joining if the desired grain is one row per customer, or keep the order grain and document it; I would not hide the issue with DISTINCT without understanding it.",
+          [
+            [
+              "check row grain and join cardinality",
+              "grain",
+              "cardinality",
+              "one-to-many"
+            ],
+            [
+              "verify key uniqueness",
+              "unique",
+              "duplicate",
+              "key"
+            ],
+            [
+              "aggregate to the intended grain when needed",
+              "aggregate",
+              "group by",
+              "grain"
+            ],
+            [
+              "avoid masking with DISTINCT",
+              "distinct",
+              "mask",
+              "deduplicate"
+            ]
+          ]
+        ],
+        [
+          "sql-02",
+          "When would you use a window function instead of GROUP BY? Give an example.",
+          "GROUP BY collapses rows to one row per group. A window function computes across related rows while keeping each row, such as ranking purchases per customer or comparing each event with the prior event using LAG. I would choose based on the output grain the consumer needs.",
+          [
+            [
+              "distinguish row collapse from row preservation",
+              "collapse",
+              "preserve",
+              "each row"
+            ],
+            [
+              "name a useful window operation",
+              "rank",
+              "lag",
+              "row_number"
+            ],
+            [
+              "partition or order the window correctly",
+              "partition",
+              "order by"
+            ],
+            [
+              "state the required output grain",
+              "grain",
+              "row per",
+              "result"
+            ]
+          ]
+        ],
+        [
+          "sql-03",
+          "A report needs the latest status for each account. How would you query it safely when timestamps can tie?",
+          "I would rank rows within each account by timestamp descending and include a stable tie-breaker such as event ID. Then I would select rank one and confirm the timestamp and key semantics, including how null timestamps should be handled.",
+          [
+            [
+              "partition rows by account",
+              "partition",
+              "account"
+            ],
+            [
+              "sort newest first",
+              "descending",
+              "latest",
+              "timestamp"
+            ],
+            [
+              "use a deterministic tie-breaker",
+              "tie",
+              "event id",
+              "stable"
+            ],
+            [
+              "handle nulls and validate result",
+              "null",
+              "validate",
+              "duplicate"
+            ]
+          ]
+        ],
+        [
+          "sql-04",
+          "How would you investigate a slow SQL query before adding an index?",
+          "I would reproduce it with representative parameters, inspect EXPLAIN or EXPLAIN ANALYZE, compare estimated and actual rows, and identify expensive scans, joins, sorts, or repeated work. I would then consider a selective index that matches the filter or join pattern and measure write and storage costs.",
+          [
+            [
+              "inspect the query plan",
+              "explain",
+              "plan"
+            ],
+            [
+              "compare estimated and actual work",
+              "actual",
+              "estimate",
+              "rows"
+            ],
+            [
+              "identify the expensive operation",
+              "scan",
+              "join",
+              "sort",
+              "cost"
+            ],
+            [
+              "measure index benefit and write cost",
+              "index",
+              "write",
+              "storage",
+              "measure"
+            ]
+          ]
+        ],
+        [
+          "sql-05",
+          "A daily aggregate doubles after a new source table is joined. What do you check?",
+          "I would check join keys, source duplicates, and table grain before aggregation. I would quantify rows before and after each join, aggregate each source to a compatible grain when appropriate, and validate totals against trusted control counts.",
+          [
+            [
+              "check join keys and source duplicates",
+              "join",
+              "duplicate"
+            ],
+            [
+              "identify each table's grain",
+              "grain",
+              "one row per"
+            ],
+            [
+              "measure counts before and after joins",
+              "count",
+              "row"
+            ],
+            [
+              "reconcile totals to controls",
+              "reconcile",
+              "control total",
+              "sum",
+              "validate"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "pipelines",
+      "lesson_keywords": [
+        "etl",
+        "elt",
+        "pipeline",
+        "data quality",
+        "ingestion",
+        "testing",
+        "logging",
+        "secrets",
+        "python + sql",
+        "api"
+      ],
+      "source": "sql",
+      "questions": [
+        [
+          "pipe-01",
+          "A source system only returns the most recent 24 hours, but the pipeline may be down for several days. How would you avoid missing data?",
+          "I would use a persisted watermark based on a reliable source field, query from the last successful checkpoint with a deliberate overlap, deduplicate on a stable key, and advance the watermark only after the destination commit succeeds. I would monitor lag and support replay.",
+          [
+            [
+              "use a persisted watermark or checkpoint",
+              "watermark",
+              "checkpoint",
+              "last successful"
+            ],
+            [
+              "use overlap or replay for late arrivals",
+              "overlap",
+              "late",
+              "replay"
+            ],
+            [
+              "deduplicate on a stable key",
+              "deduplicate",
+              "idempotent",
+              "key"
+            ],
+            [
+              "advance only after successful commit and monitor lag",
+              "commit",
+              "success",
+              "lag",
+              "monitor"
+            ]
+          ]
+        ],
+        [
+          "pipe-02",
+          "How do you make a daily batch safe to rerun after a partial failure?",
+          "I would make each write idempotent using a deterministic batch key, merge or replace only the affected partition, and wrap related changes in a transaction where possible. I would checkpoint after a confirmed commit and test rerunning the same input.",
+          [
+            [
+              "use deterministic idempotent writes",
+              "idempotent",
+              "deterministic"
+            ],
+            [
+              "limit changes to the affected partition",
+              "partition",
+              "batch"
+            ],
+            [
+              "use a transaction or atomic commit",
+              "transaction",
+              "atomic",
+              "commit"
+            ],
+            [
+              "prove a rerun is safe",
+              "rerun",
+              "replay",
+              "duplicate"
+            ]
+          ]
+        ],
+        [
+          "pipe-03",
+          "A data-quality check reports that a required column has 8% null values. What do you do before deciding to block the pipeline?",
+          "I would verify the check and compare against historical baseline, identify affected partitions and upstream changes, and determine whether nulls are valid for this field. I would apply an agreed threshold and severity policy, preserve the raw data, alert owners, and block downstream publication if consumers would be misled.",
+          [
+            [
+              "verify the check and compare baseline",
+              "verify",
+              "baseline",
+              "historical"
+            ],
+            [
+              "scope affected rows or partitions",
+              "scope",
+              "partition",
+              "affected"
+            ],
+            [
+              "apply an agreed threshold and communicate",
+              "threshold",
+              "policy",
+              "alert",
+              "owner"
+            ],
+            [
+              "protect downstream consumers and preserve source data",
+              "downstream",
+              "consumer",
+              "preserve",
+              "raw"
+            ]
+          ]
+        ],
+        [
+          "pipe-04",
+          "A pipeline has no recent data, but every task is green. How would you improve observability?",
+          "I would measure freshness and volume, not just process exit codes. I would emit structured run IDs, source and destination row counts, lag, rejected records, and duration, then alert on freshness and volume thresholds and make the lineage of each run traceable.",
+          [
+            [
+              "monitor freshness and volume",
+              "freshness",
+              "volume",
+              "lag"
+            ],
+            [
+              "emit structured run identifiers and counts",
+              "structured",
+              "run id",
+              "row count"
+            ],
+            [
+              "track rejected rows and duration",
+              "reject",
+              "duration",
+              "error"
+            ],
+            [
+              "alert on meaningful thresholds and trace lineage",
+              "alert",
+              "threshold",
+              "lineage",
+              "trace"
+            ]
+          ]
+        ],
+        [
+          "pipe-05",
+          "When would you choose a full refresh over an incremental load?",
+          "I would compare source size, change tracking reliability, destination cost, and correction needs. Incremental loads reduce work but need reliable keys, watermarks, and late-change handling; a full refresh can be simpler and safer for small datasets or when source history is mutable. I would document and validate the chosen strategy.",
+          [
+            [
+              "compare source size and processing cost",
+              "size",
+              "cost",
+              "volume"
+            ],
+            [
+              "consider change tracking and late updates",
+              "change",
+              "late",
+              "watermark"
+            ],
+            [
+              "state when full refresh is safer or simpler",
+              "full refresh",
+              "small",
+              "mutable"
+            ],
+            [
+              "validate the chosen strategy",
+              "validate",
+              "reconcile",
+              "document"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "modeling",
+      "lesson_keywords": [
+        "pandas",
+        "data modeling",
+        "dbt",
+        "warehouse"
+      ],
+      "source": "dbt",
+      "questions": [
+        [
+          "model-01",
+          "How would you model orders and order items for analytics, and what is the grain of each table?",
+          "I would define a fact table at one row per order item and dimension tables for customer, product, and date. The order header may be a separate one-row-per-order fact or staging model. I would document keys, measures, and how discounts, returns, and late changes are represented.",
+          [
+            [
+              "state a precise grain",
+              "grain",
+              "one row per"
+            ],
+            [
+              "separate facts and descriptive dimensions",
+              "fact",
+              "dimension"
+            ],
+            [
+              "define keys and measures",
+              "key",
+              "measure"
+            ],
+            [
+              "account for returns or changing data",
+              "return",
+              "change",
+              "late"
+            ]
+          ]
+        ],
+        [
+          "model-02",
+          "Your pandas transformation works on a sample but exhausts memory in production. What would you change?",
+          "I would profile the data and operations, select only needed columns, set appropriate dtypes, avoid unnecessary copies and row-wise Python loops, and process in chunks or push aggregation down to the database. I would compare output correctness and peak memory after each change.",
+          [
+            [
+              "profile before changing the implementation",
+              "profile",
+              "measure"
+            ],
+            [
+              "reduce columns and optimize dtypes",
+              "column",
+              "dtype",
+              "type"
+            ],
+            [
+              "avoid copies or row-wise loops",
+              "copy",
+              "vectoriz",
+              "loop"
+            ],
+            [
+              "chunk or push work down and validate",
+              "chunk",
+              "database",
+              "memory",
+              "correct"
+            ]
+          ]
+        ],
+        [
+          "model-03",
+          "What would you test in a dbt model before publishing it to downstream analysts?",
+          "I would test key uniqueness and non-null constraints, accepted values and relationships where appropriate, and freshness or row-volume expectations. I would review compiled SQL and dependencies, use a representative run, and document the model grain and owner.",
+          [
+            [
+              "test uniqueness and required values",
+              "unique",
+              "not null",
+              "non-null"
+            ],
+            [
+              "test valid values and relationships",
+              "accepted values",
+              "relationship",
+              "foreign key"
+            ],
+            [
+              "check freshness or expected volume",
+              "freshness",
+              "volume",
+              "row count"
+            ],
+            [
+              "review compiled output, dependencies, and grain",
+              "compiled",
+              "dependency",
+              "grain"
+            ]
+          ]
+        ],
+        [
+          "model-04",
+          "When is a star schema useful, and what trade-offs would you discuss?",
+          "A star schema makes common analytical paths clear by separating measurable facts from descriptive dimensions. It can simplify queries and improve consistency, but requires careful grain, key management, and handling of slowly changing attributes. I would decide based on query patterns and governance needs.",
+          [
+            [
+              "describe fact and dimension roles",
+              "fact",
+              "dimension"
+            ],
+            [
+              "connect design to analytical queries",
+              "analytics",
+              "query",
+              "report"
+            ],
+            [
+              "discuss grain and changing attributes",
+              "grain",
+              "slowly changing",
+              "history"
+            ],
+            [
+              "explain trade-offs for the workload",
+              "trade-off",
+              "workload",
+              "consistency"
+            ]
+          ]
+        ],
+        [
+          "model-05",
+          "A dimension's source name changes over time. How would you preserve history without corrupting old reports?",
+          "I would first distinguish a correction from a real business change. For business changes requiring history, I would use an effective-dated version or another explicit historical strategy, retain stable surrogate keys, and test that facts resolve to the intended point-in-time dimension.",
+          [
+            [
+              "distinguish correction from true change",
+              "correction",
+              "business change"
+            ],
+            [
+              "preserve effective dates or history",
+              "effective",
+              "history",
+              "version"
+            ],
+            [
+              "use stable keys for fact relationships",
+              "surrogate key",
+              "stable key",
+              "fact"
+            ],
+            [
+              "test point-in-time joins",
+              "point in time",
+              "historical",
+              "join",
+              "test"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "distributed",
+      "lesson_keywords": [
+        "spark",
+        "airflow",
+        "cloud",
+        "data lake",
+        "lakehouse",
+        "distributed"
+      ],
+      "source": "spark",
+      "questions": [
+        [
+          "dist-01",
+          "A Spark job became slow after data volume increased. What evidence do you inspect before tuning?",
+          "I would inspect the Spark UI and query plan for shuffle volume, skewed tasks, spills, partition counts, and wide transformations. I would compare input size and parallelism, then adjust partitioning or join strategy based on evidence rather than simply increasing executor size.",
+          [
+            [
+              "inspect execution plan and Spark UI",
+              "plan",
+              "spark ui",
+              "stage"
+            ],
+            [
+              "look for shuffle, skew, and spills",
+              "shuffle",
+              "skew",
+              "spill"
+            ],
+            [
+              "review partitioning and join strategy",
+              "partition",
+              "join",
+              "broadcast"
+            ],
+            [
+              "tune from evidence and compare runs",
+              "measure",
+              "compare",
+              "executor"
+            ]
+          ]
+        ],
+        [
+          "dist-02",
+          "One key dominates a Spark aggregation and a few tasks run far longer than the rest. What is likely happening?",
+          "This suggests data skew: a small number of partitions receive disproportionately many records. I would verify key distribution and task metrics, then consider salting, pre-aggregation, or a skew-aware join strategy and confirm the result remains correct.",
+          [
+            [
+              "identify data skew",
+              "skew",
+              "uneven",
+              "hot key"
+            ],
+            [
+              "verify key distribution and task metrics",
+              "distribution",
+              "partition",
+              "task"
+            ],
+            [
+              "propose a suitable skew mitigation",
+              "salt",
+              "salting",
+              "pre-aggregate",
+              "skew join"
+            ],
+            [
+              "validate correctness and performance",
+              "correct",
+              "measure",
+              "performance"
+            ]
+          ]
+        ],
+        [
+          "dist-03",
+          "How do you make an Airflow DAG reliable when an upstream API is intermittently unavailable?",
+          "I would define clear task boundaries and dependencies, configure bounded retries with delay for transient errors, use timeouts and idempotent writes, and alert after exhaustion. I would make backfills safe and distinguish data-dependent scheduling from wall-clock assumptions.",
+          [
+            [
+              "model tasks and dependencies explicitly",
+              "task",
+              "dependency"
+            ],
+            [
+              "use bounded retries and timeouts",
+              "retry",
+              "timeout",
+              "backoff"
+            ],
+            [
+              "make writes and backfills idempotent",
+              "idempotent",
+              "backfill",
+              "rerun"
+            ],
+            [
+              "alert and make failure state visible",
+              "alert",
+              "failure",
+              "monitor"
+            ]
+          ]
+        ],
+        [
+          "dist-04",
+          "How would you choose between a data lake, warehouse, or lakehouse for a new workload?",
+          "I would clarify data types, users, governance, query latency, concurrency, transformation patterns, and cost. A lake favors flexible low-cost storage, a warehouse provides managed analytical structure, and a lakehouse aims to combine open storage with table and transaction features. I would validate the decision with workload requirements.",
+          [
+            [
+              "clarify users, data, governance, and workload",
+              "user",
+              "governance",
+              "workload"
+            ],
+            [
+              "compare lake and warehouse properties",
+              "lake",
+              "warehouse"
+            ],
+            [
+              "explain lakehouse trade-off",
+              "lakehouse",
+              "open format",
+              "transaction"
+            ],
+            [
+              "tie decision to latency, scale, and cost",
+              "latency",
+              "scale",
+              "cost"
+            ]
+          ]
+        ],
+        [
+          "dist-05",
+          "A cloud pipeline needs access to a storage bucket. How would you grant access securely?",
+          "I would use a managed workload identity where available, grant only the required actions on the smallest resource scope, keep secrets out of source code and logs, and rotate credentials if secrets are necessary. I would audit access and test both allowed and denied operations.",
+          [
+            [
+              "prefer workload identity over embedded credentials",
+              "managed identity",
+              "workload identity",
+              "role"
+            ],
+            [
+              "apply least privilege at a narrow scope",
+              "least privilege",
+              "scope",
+              "permission"
+            ],
+            [
+              "keep and rotate secrets safely",
+              "secret",
+              "rotate",
+              "vault"
+            ],
+            [
+              "audit access and test denials",
+              "audit",
+              "log",
+              "deny",
+              "test"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "delivery",
+      "lesson_keywords": [
+        "linux",
+        "git",
+        "capstone",
+        "portfolio",
+        "interview",
+        "testing pipelines",
+        "logging",
+        "secrets"
+      ],
+      "source": "git",
+      "questions": [
+        [
+          "ops-01",
+          "A scheduled job has worked locally but fails in production. How would you debug it efficiently?",
+          "I would compare runtime, configuration, permissions, input paths, and environment variables. I would inspect structured logs and a correlation or run ID, reproduce with a minimal safe input, and distinguish code failure from dependency or infrastructure failure before changing production data.",
+          [
+            [
+              "compare environment and configuration",
+              "environment",
+              "configuration",
+              "permission"
+            ],
+            [
+              "use logs and a run or correlation ID",
+              "log",
+              "run id",
+              "correlation"
+            ],
+            [
+              "reproduce safely with minimal input",
+              "reproduce",
+              "minimal",
+              "safe"
+            ],
+            [
+              "separate application and infrastructure causes",
+              "dependency",
+              "infrastructure",
+              "code"
+            ]
+          ]
+        ],
+        [
+          "ops-02",
+          "How do you use Git to deliver a risky data pipeline change safely?",
+          "I would make a focused branch and small commits, review the diff, add or update tests, and run it against a non-production sample. I would merge through review, use a reversible deployment or feature flag if available, and document rollback and data-repair steps.",
+          [
+            [
+              "use a focused branch and reviewable commits",
+              "branch",
+              "commit",
+              "diff"
+            ],
+            [
+              "validate on tests or non-production data",
+              "test",
+              "staging",
+              "sample"
+            ],
+            [
+              "use review and a reversible rollout",
+              "review",
+              "rollback",
+              "feature flag"
+            ],
+            [
+              "plan data repair and communicate",
+              "repair",
+              "rollback",
+              "document"
+            ]
+          ]
+        ],
+        [
+          "ops-03",
+          "What belongs in a useful data-pipeline incident handoff?",
+          "I would include the affected dataset and consumers, first-failure and last-success times with timezone, run identifiers, error and evidence, freshness or volume impact, actions already taken, and the next owner and decision needed.",
+          [
+            [
+              "identify affected dataset and consumers",
+              "dataset",
+              "consumer",
+              "impact"
+            ],
+            [
+              "include a precise timeline and run identifier",
+              "timeline",
+              "timestamp",
+              "run id"
+            ],
+            [
+              "summarize evidence and business impact",
+              "error",
+              "evidence",
+              "freshness",
+              "volume"
+            ],
+            [
+              "name actions, owner, and next decision",
+              "action",
+              "owner",
+              "next step"
+            ]
+          ]
+        ],
+        [
+          "ops-04",
+          "How would you protect credentials used by a scheduled job?",
+          "I would store credentials in a managed secret store or identity service, use a dedicated least-privilege identity, avoid logging secret values, and rotate or revoke credentials through a documented process. I would also check where secrets could leak through build logs or error traces.",
+          [
+            [
+              "use a managed secret store or identity",
+              "secret store",
+              "vault",
+              "managed identity"
+            ],
+            [
+              "limit permission scope",
+              "least privilege",
+              "scope",
+              "permission"
+            ],
+            [
+              "prevent secrets from entering logs or source",
+              "log",
+              "source code",
+              "repository"
+            ],
+            [
+              "rotate or revoke and audit credentials",
+              "rotate",
+              "revoke",
+              "audit"
+            ]
+          ]
+        ],
+        [
+          "ops-05",
+          "You are asked to present a capstone pipeline in an interview. What would you cover?",
+          "I would describe the business question and data contract, source-to-output architecture, quality checks and failure handling, reproducibility and security, measurable results, trade-offs, and one improvement I would make next. I would be clear about what was personally built versus reused.",
+          [
+            [
+              "explain problem and architecture",
+              "problem",
+              "architecture",
+              "source",
+              "output"
+            ],
+            [
+              "show quality and failure handling",
+              "quality",
+              "failure",
+              "retry",
+              "monitor"
+            ],
+            [
+              "give measurable results and trade-offs",
+              "measure",
+              "result",
+              "trade-off"
+            ],
+            [
+              "state ownership and next improvement",
+              "I built",
+              "own",
+              "improve",
+              "next"
+            ]
+          ]
+        ]
+      ]
+    }
+  ]
+}
