@@ -228,6 +228,101 @@
               "deduplicate"
             ]
           ]
+        ],
+        [
+          "python-06",
+          "A function accepts a list and sometimes changes the caller's data unexpectedly. How would you prevent that?",
+          "I would make mutation explicit in the function contract, or return a new value instead of modifying the input. I would avoid a mutable default argument, use an immutable representation where useful, and write a test that checks whether the original input changes.",
+          [
+            [
+              "understand aliasing and mutation",
+              "alias",
+              "reference",
+              "mutat"
+            ],
+            [
+              "return a new value or document mutation",
+              "return",
+              "copy",
+              "immutable"
+            ],
+            [
+              "avoid mutable defaults",
+              "default",
+              "mutable"
+            ],
+            [
+              "test the input remains as intended",
+              "test",
+              "original",
+              "unchanged"
+            ]
+          ]
+        ],
+        [
+          "python-07",
+          "How would you structure validation for JSON received from an external API?",
+          "I would treat the payload as untrusted, check required fields and types, validate ranges and enums, and separate parsing errors from business-rule failures. I would log a safe request identifier and a concise validation reason without logging secrets or full sensitive payloads.",
+          [
+            [
+              "treat input as untrusted and validate shape",
+              "untrusted",
+              "required field",
+              "schema",
+              "type"
+            ],
+            [
+              "validate business constraints",
+              "range",
+              "enum",
+              "business rule"
+            ],
+            [
+              "separate parse and rule failures",
+              "parse",
+              "validation",
+              "error"
+            ],
+            [
+              "log safely without sensitive values",
+              "log",
+              "secret",
+              "sensitive",
+              "request id"
+            ]
+          ]
+        ],
+        [
+          "python-08",
+          "A pipeline uses nested loops to compare two large lists. What alternatives would you consider?",
+          "I would first define the matching key and expected semantics, then use a dictionary or set for indexed lookup or a database join when appropriate. I would consider memory and duplicate behavior, measure the result, and test that ordering and null handling remain correct.",
+          [
+            [
+              "define matching key and semantics",
+              "key",
+              "match",
+              "semantics"
+            ],
+            [
+              "use indexed lookup or a join",
+              "dictionary",
+              "set",
+              "index",
+              "join"
+            ],
+            [
+              "consider memory and duplicate behavior",
+              "memory",
+              "duplicate"
+            ],
+            [
+              "measure and preserve correctness",
+              "measure",
+              "order",
+              "null",
+              "correct"
+            ]
+          ]
         ]
       ]
     },
@@ -395,6 +490,99 @@
               "control total",
               "sum",
               "validate"
+            ]
+          ]
+        ],
+        [
+          "sql-06",
+          "How do NULL values affect filters and joins, and how do you avoid surprising results?",
+          "SQL NULL represents an unknown value, so comparisons such as equality to NULL do not evaluate true; use IS NULL or IS NOT NULL. I would review join keys and aggregates for null behavior and avoid replacing null with a default unless that default has a valid business meaning.",
+          [
+            [
+              "explain unknown and three-valued logic",
+              "unknown",
+              "three-valued",
+              "null"
+            ],
+            [
+              "use IS NULL predicates",
+              "is null",
+              "is not null"
+            ],
+            [
+              "check joins and aggregates",
+              "join",
+              "aggregate",
+              "count"
+            ],
+            [
+              "avoid unsafe default substitution",
+              "coalesce",
+              "default",
+              "business meaning"
+            ]
+          ]
+        ],
+        [
+          "sql-07",
+          "When does a common table expression improve a query, and when might it not help performance?",
+          "A CTE can make a multi-step query easier to read and maintain by naming intermediate results. I would still inspect the execution plan because optimizer behavior depends on the database and query shape; I would not assume a CTE automatically materializes or makes the query faster.",
+          [
+            [
+              "describe readability and named steps",
+              "read",
+              "step",
+              "maintain"
+            ],
+            [
+              "consider database optimizer behavior",
+              "optimizer",
+              "database",
+              "plan"
+            ],
+            [
+              "inspect rather than assume performance",
+              "explain",
+              "measure",
+              "performance"
+            ],
+            [
+              "state trade-offs for the query",
+              "trade-off",
+              "materialize",
+              "query"
+            ]
+          ]
+        ],
+        [
+          "sql-08",
+          "A dashboard total differs from the source system's total. How would you reconcile it?",
+          "I would align the time window, timezone, filters, grain, and treatment of late or deleted records. Then I would compare counts and sums at each transformation step, inspect null and duplicate handling, and document any agreed business-rule difference.",
+          [
+            [
+              "align time window and timezone",
+              "time",
+              "timezone",
+              "window"
+            ],
+            [
+              "compare filters, grain, and change handling",
+              "filter",
+              "grain",
+              "late",
+              "deleted"
+            ],
+            [
+              "reconcile counts and sums stage by stage",
+              "count",
+              "sum",
+              "stage"
+            ],
+            [
+              "document business-rule differences",
+              "business rule",
+              "document",
+              "difference"
             ]
           ]
         ]
@@ -572,6 +760,101 @@
               "document"
             ]
           ]
+        ],
+        [
+          "pipe-06",
+          "A source delivers records late and sometimes updates yesterday's values. How should an incremental pipeline handle both?",
+          "I would define the source's correction window, re-read an overlapping range or use a change stream, and merge on a stable key with an update timestamp. I would monitor freshness and reconciliation, and retain replay capability so corrections can be applied safely.",
+          [
+            [
+              "define lateness and correction window",
+              "late",
+              "correction",
+              "window"
+            ],
+            [
+              "re-read overlap or consume changes",
+              "overlap",
+              "change stream",
+              "reprocess"
+            ],
+            [
+              "merge by stable key and update time",
+              "merge",
+              "stable key",
+              "updated"
+            ],
+            [
+              "monitor freshness and support replay",
+              "freshness",
+              "replay",
+              "reconcile"
+            ]
+          ]
+        ],
+        [
+          "pipe-07",
+          "A team asks for exactly-once delivery from a source that can resend messages. What guarantee can you make?",
+          "I would clarify the boundary of the guarantee. Networks and clients may retry, so I would design idempotent processing with event identifiers, deduplication, and transactional or checkpointed commits. I would describe whether the guarantee is source-to-sink exactly once or effectively-once results within a defined scope.",
+          [
+            [
+              "clarify the guarantee boundary",
+              "boundary",
+              "scope",
+              "source",
+              "sink"
+            ],
+            [
+              "expect retries or redelivery",
+              "retry",
+              "resend",
+              "redeliver"
+            ],
+            [
+              "deduplicate with stable event IDs",
+              "deduplicate",
+              "event id",
+              "idempotent"
+            ],
+            [
+              "use transactional/checkpointed commits and state the limit",
+              "transaction",
+              "checkpoint",
+              "commit",
+              "effectively once"
+            ]
+          ]
+        ],
+        [
+          "pipe-08",
+          "How do you introduce a data contract between a producer and downstream consumers?",
+          "I would agree on schema, types, required fields, semantics, and compatibility rules with owners. I would validate changes in CI or at ingestion, version breaking changes, monitor violations, and coordinate a migration window instead of silently coercing incompatible data.",
+          [
+            [
+              "agree schema, types, and semantics",
+              "schema",
+              "type",
+              "semantics"
+            ],
+            [
+              "define compatibility and ownership",
+              "compatibility",
+              "owner",
+              "contract"
+            ],
+            [
+              "validate changes before release",
+              "ci",
+              "validate",
+              "test"
+            ],
+            [
+              "version breaking changes and plan migration",
+              "version",
+              "breaking",
+              "migration"
+            ]
+          ]
         ]
       ]
     },
@@ -732,6 +1015,100 @@
               "point in time",
               "historical",
               "join",
+              "test"
+            ]
+          ]
+        ],
+        [
+          "model-06",
+          "How do natural and surrogate keys differ, and when would you use each?",
+          "A natural key comes from business data and may change or have source-specific rules. A surrogate key is an internally assigned stable identifier. I would preserve the natural key for traceability while using a surrogate key when history, source integration, or warehouse relationships require a stable identity.",
+          [
+            [
+              "define business-derived natural key",
+              "natural key",
+              "business",
+              "source"
+            ],
+            [
+              "define stable assigned surrogate key",
+              "surrogate",
+              "assigned",
+              "stable"
+            ],
+            [
+              "discuss change and integration risks",
+              "change",
+              "integration",
+              "duplicate"
+            ],
+            [
+              "apply keys to history and relationships",
+              "history",
+              "relationship",
+              "fact",
+              "dimension"
+            ]
+          ]
+        ],
+        [
+          "model-07",
+          "An incremental dbt model misses corrected historical rows. What do you investigate?",
+          "I would inspect the incremental filter, update timestamp reliability, unique key, and late-arrival policy. I would determine whether affected partitions need a lookback or targeted rebuild, compare incremental output to a full-refresh sample, and add a regression test for corrections.",
+          [
+            [
+              "inspect filter, watermark, and unique key",
+              "filter",
+              "watermark",
+              "unique key"
+            ],
+            [
+              "check late updates and lookback",
+              "late",
+              "lookback",
+              "correction"
+            ],
+            [
+              "rebuild affected data safely",
+              "partition",
+              "rebuild",
+              "full refresh"
+            ],
+            [
+              "compare outputs and add a regression test",
+              "compare",
+              "test",
+              "regression"
+            ]
+          ]
+        ],
+        [
+          "model-08",
+          "How do you keep pandas concatenation or joins from silently changing row counts?",
+          "I would inspect keys and cardinality before joining, choose validate options where available, and compare input and output counts. For concatenation I would align columns and indexes intentionally, check duplicates, and assert expected shape or totals in a test.",
+          [
+            [
+              "check join keys and cardinality",
+              "key",
+              "cardinality",
+              "one-to-many"
+            ],
+            [
+              "use validation and compare row counts",
+              "validate",
+              "row count",
+              "shape"
+            ],
+            [
+              "align concat columns and indexes",
+              "column",
+              "index",
+              "concat"
+            ],
+            [
+              "assert duplicate and total expectations",
+              "duplicate",
+              "assert",
               "test"
             ]
           ]
@@ -902,6 +1279,100 @@
               "log",
               "deny",
               "test"
+            ]
+          ]
+        ],
+        [
+          "dist-06",
+          "A Spark job creates thousands of tiny files in object storage. Why is that a problem and what would you change?",
+          "Many tiny files increase listing and task overhead and can hurt downstream reads. I would inspect file size and partition layout, then compact or coalesce outputs appropriately without forcing a single partition for a large dataset. I would preserve useful partition pruning and measure read and write performance.",
+          [
+            [
+              "identify file listing and task overhead",
+              "tiny file",
+              "listing",
+              "task"
+            ],
+            [
+              "inspect file size and partition layout",
+              "file size",
+              "partition"
+            ],
+            [
+              "compact without collapsing all data to one task",
+              "compact",
+              "coalesce",
+              "single"
+            ],
+            [
+              "measure downstream read and write effects",
+              "measure",
+              "read",
+              "write"
+            ]
+          ]
+        ],
+        [
+          "dist-07",
+          "An Airflow DAG backfill would rerun months of data. What safeguards do you add before launching it?",
+          "I would confirm the date range and task catchup behavior, verify idempotent writes and resource capacity, and test a small interval first. I would coordinate downstream impacts, monitor runs, and define pause, retry, and rollback procedures.",
+          [
+            [
+              "confirm date range and catchup behavior",
+              "date",
+              "range",
+              "catchup",
+              "backfill"
+            ],
+            [
+              "verify idempotence and capacity",
+              "idempotent",
+              "capacity",
+              "resource"
+            ],
+            [
+              "test a small interval first",
+              "small",
+              "test",
+              "sample"
+            ],
+            [
+              "coordinate monitoring and recovery",
+              "monitor",
+              "pause",
+              "rollback",
+              "retry"
+            ]
+          ]
+        ],
+        [
+          "dist-08",
+          "How would you decide the partition columns for a large analytical table?",
+          "I would use common query filters and data distribution, avoid extremely high-cardinality or skewed partitioning, and consider file counts and update patterns. I would validate pruning and maintenance cost with representative queries rather than partitioning by every possible field.",
+          [
+            [
+              "use observed query filters",
+              "query",
+              "filter",
+              "workload"
+            ],
+            [
+              "consider cardinality and skew",
+              "cardinality",
+              "skew",
+              "distribution"
+            ],
+            [
+              "consider file counts and update patterns",
+              "file",
+              "update",
+              "maintenance"
+            ],
+            [
+              "benchmark pruning and maintenance costs",
+              "pruning",
+              "measure",
+              "cost"
             ]
           ]
         ]
@@ -1077,6 +1548,167 @@
               "own",
               "improve",
               "next"
+            ]
+          ]
+        ],
+        [
+          "ops-06",
+          "A production pipeline may be rerun after an operator fixes a secret. What steps make that recovery safe?",
+          "I would rotate the compromised or invalid secret through the approved secret store, verify the workload identity and least-privilege access, and avoid exposing the value in logs. Before rerunning, I would confirm the last committed checkpoint, idempotency, and affected partitions, then monitor the recovery.",
+          [
+            [
+              "rotate via approved secret storage",
+              "rotate",
+              "secret store",
+              "vault"
+            ],
+            [
+              "verify identity and least privilege",
+              "identity",
+              "least privilege",
+              "permission"
+            ],
+            [
+              "confirm checkpoint and rerun safety",
+              "checkpoint",
+              "idempotent",
+              "rerun"
+            ],
+            [
+              "scope and monitor recovery",
+              "scope",
+              "partition",
+              "monitor",
+              "log"
+            ]
+          ]
+        ],
+        [
+          "ops-07",
+          "What should a useful data pipeline log include, and what should it never include?",
+          "It should include a run ID, task and dataset, timestamps with timezone, row counts, duration, and a structured error category. It should not contain passwords, access tokens, or unnecessary personal data. I would correlate logs with metrics and traces while keeping retention appropriate.",
+          [
+            [
+              "include run IDs, task, and dataset",
+              "run id",
+              "task",
+              "dataset"
+            ],
+            [
+              "include time, counts, and duration",
+              "timestamp",
+              "count",
+              "duration"
+            ],
+            [
+              "exclude credentials and unnecessary personal data",
+              "password",
+              "token",
+              "personal",
+              "secret"
+            ],
+            [
+              "correlate logs with metrics or traces",
+              "metric",
+              "trace",
+              "correlate"
+            ]
+          ]
+        ],
+        [
+          "ops-08",
+          "A code review finds a hard-coded database password. What do you do before merging?",
+          "I would remove the secret from code, move it to a managed secret mechanism or workload identity, rotate the exposed credential, and review repository history and logs for exposure. I would verify the replacement works in a non-production environment and block the merge until the secret is removed.",
+          [
+            [
+              "remove secret from source",
+              "hard-coded",
+              "source",
+              "repository"
+            ],
+            [
+              "rotate the exposed credential",
+              "rotate",
+              "revoke",
+              "credential"
+            ],
+            [
+              "check history and logs for exposure",
+              "history",
+              "log",
+              "exposure"
+            ],
+            [
+              "validate a safe replacement before merge",
+              "secret store",
+              "identity",
+              "test",
+              "merge"
+            ]
+          ]
+        ],
+        [
+          "ops-09",
+          "How would you explain a pipeline's business value and reliability to a nontechnical stakeholder?",
+          "I would connect the pipeline to the decision or process it enables, describe freshness and quality in plain language, and report measurable service indicators such as on-time delivery, completeness, and incident recovery time. I would state limitations and the next improvement without overstating certainty.",
+          [
+            [
+              "connect output to a business decision",
+              "business",
+              "decision",
+              "process"
+            ],
+            [
+              "explain freshness and quality plainly",
+              "freshness",
+              "quality",
+              "complete"
+            ],
+            [
+              "provide measurable reliability indicators",
+              "measure",
+              "on time",
+              "recovery",
+              "incident"
+            ],
+            [
+              "state limitations and next improvement",
+              "limit",
+              "uncertainty",
+              "improve"
+            ]
+          ]
+        ],
+        [
+          "ops-10",
+          "What evidence would you include to show a capstone project is reproducible?",
+          "I would provide versioned code and configuration without secrets, a clear setup and run procedure, sample or documented input data, pinned dependencies, and expected outputs or validation checks. I would show how a clean run reproduces the result and identify external services or assumptions.",
+          [
+            [
+              "version code and safe configuration",
+              "version",
+              "git",
+              "configuration"
+            ],
+            [
+              "document setup and dependencies",
+              "setup",
+              "dependency",
+              "lock"
+            ],
+            [
+              "provide inputs and expected validation",
+              "input",
+              "expected",
+              "validate",
+              "output"
+            ],
+            [
+              "demonstrate a clean reproducible run and assumptions",
+              "reproduce",
+              "clean",
+              "assumption",
+              "service"
             ]
           ]
         ]
