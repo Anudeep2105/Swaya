@@ -67,6 +67,18 @@ code{font-family:Consolas,monospace}
 .option:has(input[type="radio"]:checked){border-color:#2563eb;background:#eff6ff}
 .option input[type="radio"]{flex:0 0 18px;width:18px;height:18px;margin:2px 0 0;padding:0;accent-color:#2563eb}
 .option span{display:block;flex:1;min-width:0;overflow-wrap:anywhere}
+.mi-layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(240px,1fr);gap:16px;align-items:start}
+.mi-history{display:grid;gap:8px}.mi-history-item{text-align:left;white-space:normal}
+.mi-interview{max-width:980px;margin:auto}.mi-progress,.mi-voice-row,.mi-controls{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.mi-question-card{padding:clamp(18px,4vw,32px)}.mi-question-card h1{font-size:clamp(22px,3vw,32px);line-height:1.35;margin:14px 0}
+.mi-question-meta{color:#175cd3;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.mi-question-card textarea{min-height:160px;line-height:1.6}.mi-voice-row{justify-content:flex-start;margin:0 0 18px}
+.mi-controls{border-top:1px solid #eaecf0;padding-top:16px}.mi-report-head{display:grid;grid-template-columns:minmax(180px,.7fr) 2fr;gap:16px}
+.mi-score-card{background:linear-gradient(135deg,#eff6ff,#fff);border-color:#bfdbfe}.mi-score{font-size:48px;font-weight:800;color:#175cd3;line-height:1.15;margin:8px 0}
+.mi-report-question summary{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer}
+.mi-report-question h3{line-height:1.45}.mi-answer-copy{white-space:pre-wrap;overflow-wrap:anywhere;background:#f9fafb;padding:12px;border-radius:8px}
+.mi-launch-card{background:linear-gradient(120deg,#eff6ff,#fff);border-color:#bfdbfe}
+@media(max-width:800px){.mi-layout,.mi-report-head{grid-template-columns:1fr}.mi-report-question summary{align-items:flex-start;flex-direction:column}}
 .public-nav{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px max(20px,calc((100% - 1200px)/2));background:#101828;color:#fff}
 .public-nav strong{font-size:21px}.public-nav .nav-row{margin:0}
 .public-wrap{max-width:1200px;margin:auto;padding:32px 20px 64px}
@@ -95,6 +107,7 @@ code{font-family:Consolas,monospace}
 
 <div id="app"></div>
 
+<script src="/mock-interview.js"></script>
 <script>
 const API='/api';
 let currentUser=null;
@@ -470,6 +483,7 @@ function shell(content){
         <button onclick="aboutPage()">&#8505; About Swaya</button>
         <button onclick="feedbackPage()">&#128172; Feedback</button>
         <button onclick="course()">&#128218; Course</button>
+        <button onclick="mockInterview()">&#127908; Mock Interview</button>
         <button onclick="spreadsheetLab()">&#128202; Spreadsheet Practice</button>
         <button onclick="sqlLab()">&#128221; SQL Practice</button>
         <button onclick="gamification()">&#128202; Progress</button>
@@ -570,6 +584,13 @@ shell(`
       <div class="muted">Role</div>
       <div class="stat" style="font-size:22px">${esc(currentUser?.role)}</div>
     </div>
+  </div>
+
+  <div class="card mi-launch-card">
+    <span class="pill">Interview practice</span>
+    <h2>&#127908; Voice mock interview</h2>
+    <p class="muted">Choose any enrolled course module, answer spoken or typed questions, and get a personal improvement report.</p>
+    <button onclick="mockInterview()">Start a mock interview &#8594;</button>
   </div>
 
   ${c ? `

@@ -231,4 +231,17 @@ class FeedbackReport(Base):
     screenshot_type: Mapped[str|None]=mapped_column(String(100),nullable=True)
     created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),default=utcnow)
 
+class MockInterviewSession(Base):
+    __tablename__='mock_interview_sessions'
+    id: Mapped[int]=mapped_column(primary_key=True)
+    user_id: Mapped[int]=mapped_column(ForeignKey('users.id'),index=True)
+    course_id: Mapped[int]=mapped_column(ForeignKey('courses.id'),index=True)
+    lesson_id: Mapped[int]=mapped_column(ForeignKey('lessons.id'),index=True)
+    questions_json: Mapped[str]=mapped_column(Text,default='[]')
+    answers_json: Mapped[str]=mapped_column(Text,default='[]')
+    feedback_json: Mapped[str]=mapped_column(Text,default='{}')
+    score: Mapped[float|None]=mapped_column(Float,nullable=True)
+    status: Mapped[str]=mapped_column(String(20),default='started',index=True)
+    created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),default=utcnow)
+    submitted_at: Mapped[datetime|None]=mapped_column(DateTime(timezone=True),nullable=True)
 
