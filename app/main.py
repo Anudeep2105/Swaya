@@ -1605,6 +1605,10 @@ def mock_interview_report(attempt_id:int, user=Depends(current_user), db:Session
     }
 
 
+@app.get('/mock-interview.js')
+def mock_interview_script(): return FileResponse(STATIC/'mock_interview.js', media_type='application/javascript')
+
+
 @app.get('/')
 def index(): return FileResponse(STATIC/'index.html')
 
