@@ -30,4 +30,10 @@ Public contributor, content developer, and learner resource-access requests are 
 
 Uploaded lesson media, assignment files, and certificate PDFs are stored in Supabase Storage. The free tier allows up to 50 MB per object and 1 GB total file storage. Render's free service can sleep when idle, and Supabase free projects may pause after a week of low activity; this setup is for a small pilot rather than a high-availability production service.
 
+
+
+### Voice mock interviews
+
+Learners can open **Mock Interview** from the sidebar or dashboard, select an enrolled course module, and answer five interview prompts by speaking or typing. Browser speech recognition transcribes microphone input; Swaya does not receive or store audio. When the learner submits, the app stores the answer transcript and a module-specific report with rubric coverage, strengths, improvement scope, model answers, and source links. The score is a transparent checklist-based practice aid, not an AI hiring decision. The authored Data Engineering bank is in `app/mock_interview_bank.json`; the SOC bank is composed from the selected SOC lesson, including its foundations, simulated scenarios, practical drills, and KQL/SPL exercises. Question topics link to primary references such as NIST, MITRE ATT&CK, Python, PostgreSQL, Apache Spark, Airflow, pandas, and dbt.
+
 The cloud database starts fresh with the 30-day Data Engineering course and the SOC Analyst L1/L2 Interview Preparation course. The SOC course is seeded idempotently at startup with a SOC basics note sheet in the first lesson, 10 foundations lessons covering 100 quick questions and 24 interview answers, 60 simulated incident scenario lessons, 20 practical investigation lessons, and 12 KQL/SPL lessons. Every lesson uses Swaya's standard progress and five-question assessment flow; practical and query lessons also have LMS assignment submissions. Learners can choose it during registration or request access; existing learners are not enrolled automatically. All SOC evidence is fictional training data, not live telemetry. Local user accounts, progress, and uploaded files are not copied automatically.
